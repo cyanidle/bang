@@ -15,20 +15,25 @@ file(DOWNLOAD
 
 include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
 
-CPMAddPackage("gh:fmtlib/fmt#10.2.0")
 CPMAddPackage("gh:cyanidle/describe#1.0.0")
-CPMAddPackage("gh:p-ranav/argparse@3.0")
+CPMAddPackage("gh:fmtlib/fmt#10.2.0")
+CPMAddPackage("gh:pybind/pybind11@2.12.0")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
-add_library(lidar-bridge SHARED src/lidar-bridge.cpp)
-target_link_libraries(lidar-bridge PRIVATE rplidar-sdk)
-
-add_executable(bridge-test src/bridge-test.cpp)
-target_link_libraries(bridge-test PRIVATE
-  fmt describe argparse lidar-bridge
-)
-
+add_library(lidarbridge SHARED src/lidar-bridge.cpp)
+target_link_libraries(lidarbridge PRIVATE
+    Python3::Python
+    pybind11_headers
+    fmt
+    describe
+    rplidar-sdk)
+set_property(TARGET lidarbridge PROPERTY PREFIX "")
+if (UNIX)
+    target_compile_options(fmt PRIVATE -fPIC)
+    target_compile_options(rplidar-sdk PRIVATE -fPIC)
+    target_link_options(lidarbridge PRIVATE -Wl,--no-undefined)
+endif()
 
 function(Generate source out)
     execute_process(

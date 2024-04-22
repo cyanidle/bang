@@ -42,6 +42,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+
 #include <time.h>
 #include "hal/types.h"
 #include "arch/linux/net_serial.h"
@@ -95,11 +96,13 @@ bool raw_serial::bind(const char * portname, uint32_t baudrate, uint32_t flags)
 
 bool raw_serial::open(const char * portname, uint32_t baudrate, uint32_t flags)
 {
-    if (isOpened()) {
-        close();
-    }
+    if (isOpened()) close();
+    
     serial_fd = ::open(portname, O_RDWR | O_NOCTTY | O_NDELAY);
+
     if (serial_fd == -1) return false;
+
+    
 
 #if !defined(__GNUC__)
     // for standard UNIX
@@ -319,10 +322,15 @@ int raw_serial::waitfordata(size_t data_count, _u32 timeout, size_t * returned_s
 
     if ( isOpened() )
     {
-        if ( ioctl(serial_fd, FIONREAD, returned_size) == -1) return ANS_DEV_ERR;
+        int nread;
+
+        if ( ioctl(serial_fd, FIONREAD, &nread) == -1) return ANS_DEV_ERR;
+
+        *returned_size = nread;
+
         if (*returned_size >= data_count)
         {
-            return ANS_OK;
+            return 0;
         }
     }
 
@@ -367,19 +375,13 @@ int raw_serial::waitfordata(size_t data_count, _u32 timeout, size_t * returned_s
             if ( ioctl(serial_fd, FIONREAD, returned_size) == -1) return ANS_DEV_ERR;
             if (*returned_size >= data_count)
             {
-                return ANS_OK;
-            }
-            else 
-            {
-                int remain_timeout = timeout_val.tv_sec*1000000 + timeout_val.tv_usec;
-                int expect_remain_time = (data_count - *returned_size)*1000000*8/_baudrate;
-                if (remain_timeout > expect_remain_time)
-                    usleep(expect_remain_time);
+                return 0;
             }
         }
         
     }
 
+    *returned_size=0;
     return ANS_DEV_ERR;
 }
 
@@ -422,7 +424,7 @@ void raw_serial::cancelOperation()
     _operation_aborted = true;
     if (_selfpipe[1] == -1) return;
 
-    ::write(_selfpipe[1], "x", 1);
+    (int)::write(_selfpipe[1], "x", 1);
 }
 
 _u32 raw_serial::getTermBaudBitmap(_u32 baud)

@@ -31,10 +31,6 @@
 
 #pragma once
 
-#define  MAX_SCAN_NODES 8192
-#include "hal/event.h"
-#include "hal/locker.h"
-#include "hal/thread.h"
 #ifndef __cplusplus
 #error "The Slamtec LIDAR SDK requires a C++ compiler to be built"
 #endif
@@ -130,6 +126,45 @@ namespace sl {
         }
     };
 
+    enum LIDARTechnologyType {
+        LIDAR_TECHNOLOGY_UNKNOWN = 0,
+        LIDAR_TECHNOLOGY_TRIANGULATION = 1,
+        LIDAR_TECHNOLOGY_DTOF = 2,
+        LIDAR_TECHNOLOGY_ETOF = 3,
+        LIDAR_TECHNOLOGY_FMCW = 4,
+    };
+
+    enum LIDARMajorType {
+        LIDAR_MAJOR_TYPE_UNKNOWN = 0,
+        LIDAR_MAJOR_TYPE_A_SERIES = 1,
+        LIDAR_MAJOR_TYPE_S_SERIES = 2,
+        LIDAR_MAJOR_TYPE_T_SERIES = 3,
+        LIDAR_MAJOR_TYPE_M_SERIES = 4,
+        LIDAR_MAJOR_TYPE_C_SERIES = 6,
+    };
+
+    enum LIDARInterfaceType {
+        LIDAR_INTERFACE_UART = 0,
+        LIDAR_INTERFACE_ETHERNET = 1,
+        LIDAR_INTERFACE_USB = 2,
+        LIDAR_INTERFACE_CANBUS = 5,
+
+
+        LIDAR_INTERFACE_UNKNOWN = 0xFFFF,
+    };
+
+    struct SlamtecLidarTimingDesc {
+
+        sl_u32  sample_duration_uS;
+        sl_u32  native_baudrate;
+        
+        sl_u32  linkage_delay_uS;
+
+        LIDARInterfaceType native_interface_type;
+
+        bool    native_timestamp_support;
+    };
+
     /**
     * Abstract interface of communication channel
     */
@@ -163,6 +198,18 @@ namespace sl {
         */
         virtual bool waitForData(size_t size, sl_u32 timeoutInMs = -1, size_t* actualReady = nullptr) = 0;
 
+
+        /**
+        * Wait for some data
+        * \param size_hint Byte count may available to retrieve without beening blocked 
+        * \param timeoutInMs Wait timeout (in microseconds, -1 for forever)
+        * \return RESULT_OK if there is data available for receiving
+        *         RESULT_OPERATION_TIMEOUT if the given timeout duration is exceed
+        *         RESULT_OPERATION_FAIL if there is something wrong with the channel
+        */
+        virtual sl_result waitForDataExt(size_t& size_hint, sl_u32 timeoutInMs = 1000) = 0;
+
+
         /**
         * Send data to remote endpoint
         * \param data The data buffer
@@ -183,6 +230,8 @@ namespace sl {
         * Clear read cache
         */
         virtual void clearReadCache() = 0;
+
+        virtual int getChannelType() = 0;
 
     private:
 
@@ -357,6 +406,8 @@ namespace sl {
 		/////Get LPX series lidar's MAC address
 		///
 		/// \param macAddrArray         The device MAC information returned from the LPX series lidar
+        ///                             Notice: the macAddrArray must point to a valid buffer with at least 6 bytes length
+        ///                                     Otherwise, buffer overwrite will occur
 		virtual sl_result getDeviceMacAddr(sl_u8* macAddrArray, sl_u32 timeoutInMs = DEFAULT_TIMEOUT) = 0;
 
         /// Ask the LIDAR core system to stop the current scan operation and enter idle state. The background thread will be terminated
@@ -382,6 +433,39 @@ namespace sl {
         ///
         /// \The caller application can set the timeout value to Zero(0) to make this interface always returns immediately to achieve non-block operation.
         virtual sl_result grabScanDataHq(sl_lidar_response_measurement_node_hq_t* nodebuffer, size_t& count, sl_u32 timeout = DEFAULT_TIMEOUT) = 0;
+
+
+
+        /// Wait and grab a complete 0-360 degree scan data previously received with timestamp support.
+        /// 
+        /// The returned timestamp belongs to the first data point of the scan data (begining of the scan).
+        /// Its value is represented based on the current machine's time domain with the unit of microseconds (uS).
+        /// 
+        /// If the currently connected LIDAR supports hardware timestamp mechanism, this timestamp will use 
+        /// the actual data emitted by the LIDAR device and remap it to the current machine's time domain. 
+        /// 
+        /// For other models that do not support hardware timestamps, this data will be deducted through estimation, 
+        /// and there may be a slight deviation from the actual situation. 
+        ///
+        /// The grabbed scan data returned by this interface always has the following charactistics:
+        ///
+        /// 1) The first node of the grabbed data array (nodebuffer[0]) must be the first sample of a scan, i.e. the start_bit == 1
+        /// 2) All data nodes are belong to exactly ONE complete 360-degrees's scan
+        /// 3) Note, the angle data in one scan may not be ascending. You can use API ascendScanData to reorder the nodebuffer.
+        ///
+        /// \param nodebuffer     Buffer provided by the caller application to store the scan data
+        ///
+        /// \param count          The caller must initialize this parameter to set the max data count of the provided buffer (in unit of rplidar_response_measurement_node_t).
+        ///                       Once the interface returns, this parameter will store the actual received data count.
+        ///
+        /// \param timestamp_uS   The reference used to store the timestamp value.
+        /// \param timeout        Max duration allowed to wait for a complete scan data, nothing will be stored to the nodebuffer if a complete 360-degrees' scan data cannot to be ready timely.
+        ///
+        /// The interface will return SL_RESULT_OPERATION_TIMEOUT to indicate that no complete 360-degrees' scan can be retrieved withing the given timeout duration. 
+        ///
+        /// \The caller application can set the timeout value to Zero(0) to make this interface always returns immediately to achieve non-block operation.
+        virtual sl_result grabScanDataHqWithTimeStamp(sl_lidar_response_measurement_node_hq_t* nodebuffer, size_t& count, sl_u64 & timestamp_uS, sl_u32 timeout = DEFAULT_TIMEOUT) = 0;
+
 
         /// Ascending the scan data according to the angle value in the scan.
         ///
@@ -422,178 +506,38 @@ namespace sl {
         /// \param requiredBaudRate   The new baudrate required to be used. It MUST matches with the baudrate of the binded channel.
         /// \param baudRateDetected   The actual baudrate detected by the LIDAR system
         virtual sl_result negotiateSerialBaudRate(sl_u32 requiredBaudRate, sl_u32* baudRateDetected = NULL) = 0;
+
+
+
+        /// Get the technology of the LIDAR's measurement system
+        /// 
+        /// 
+        /// \param devInfo   The device info used to deduct the result
+        ///                  If NULL is specified, a driver cached version of the connected LIDAR will be used
+        virtual LIDARTechnologyType getLIDARTechnologyType(const sl_lidar_response_device_info_t* devInfo = nullptr) = 0;
+        
+        
+        /// Get the Major Type (Series Info) of the LIDAR
+        /// 
+        /// 
+        /// \param devInfo   The device info used to deduct the result
+        ///                  If NULL is specified, a driver cached version of the connected LIDAR will be used
+        virtual LIDARMajorType getLIDARMajorType(const sl_lidar_response_device_info_t* devInfo = nullptr) = 0;
+
+
+        /// Get the Model Name of the LIDAR
+        /// The result will be somthing like: "A1M8" or "S1M1" or "A3M1-R1"
+        /// 
+        /// \param out_description   The output string that contains the generated model name
+        ///                          
+        /// \param fetchAliasName    If set to true, a communication will be taken to ask if there is any Alias name availabe
+        /// \param devInfo           The device info used to deduct the result
+        ///                          If NULL is specified, a driver cached version of the connected LIDAR will be used
+        /// \param timeout           The timeout value used by potential data communication
+        virtual sl_result getModelNameDescriptionString(std::string& out_description, bool fetchAliasName = true, const sl_lidar_response_device_info_t* devInfo = nullptr, sl_u32 timeout = DEFAULT_TIMEOUT) = 0;
+
 };
 
-class SlamtecLidarDriver :public ILidarDriver
-{
-public:
-    enum {
-        LEGACY_SAMPLE_DURATION = 476,
-    };
-
-    enum {
-         NORMAL_CAPSULE = 0,
-         DENSE_CAPSULE = 1,
-    };
-
-    enum {
-        A2A3_LIDAR_MINUM_MAJOR_ID  = 2,
-        TOF_LIDAR_MINUM_MAJOR_ID = 6,
-    };
-
-public:
-    SlamtecLidarDriver();
-
-    sl_result connect(IChannel* channel);
-
-    void disconnect();
-
-    bool isConnected();
-
-    sl_result reset(sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result getAllSupportedScanModes(std::vector<LidarScanMode>& outModes, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result getTypicalScanMode(sl_u16& outMode, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result startScan(bool force, bool useTypicalScan, sl_u32 options = 0, LidarScanMode* outUsedScanMode = nullptr);
-
-    sl_result startScanNormal(bool force, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result startScanExpress(bool force, sl_u16 scanMode, sl_u32 options = 0, LidarScanMode* outUsedScanMode = nullptr, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result stop(sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result grabScanDataHq(sl_lidar_response_measurement_node_hq_t* nodebuffer, size_t& count, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result getDeviceInfo(sl_lidar_response_device_info_t& info, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result checkMotorCtrlSupport(MotorCtrlSupport & support, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result getFrequency(const LidarScanMode& scanMode, const sl_lidar_response_measurement_node_hq_t* nodes, size_t count, float& frequency);
-
-    sl_result setLidarIpConf(const sl_lidar_ip_conf_t& conf, sl_u32 timeout);
-
-    sl_result getLidarIpConf(sl_lidar_ip_conf_t& conf, sl_u32 timeout);
-
-    sl_result getHealth(sl_lidar_response_device_health_t& health, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result getDeviceMacAddr(sl_u8* macAddrArray, sl_u32 timeoutInMs);
-
-    sl_result ascendScanData(sl_lidar_response_measurement_node_hq_t * nodebuffer, size_t count);
-
-    sl_result getScanDataWithIntervalHq(sl_lidar_response_measurement_node_hq_t * nodebuffer, size_t & count);
-    sl_result setMotorSpeed(sl_u16 speed = DEFAULT_MOTOR_SPEED);
-
-    sl_result getMotorInfo(LidarMotorInfo &motorInfo, sl_u32 timeoutInMs);
-
-protected:
-    sl_result startMotor();
-
-    sl_result getDesiredSpeed(sl_lidar_response_desired_rot_speed_t & motorSpeed, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result checkSupportConfigCommands(bool& outSupport, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result getScanModeCount(sl_u16& modeCount, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result setLidarConf(sl_u32 type, const void* payload, size_t payloadSize, sl_u32 timeout);
-
-    sl_result getLidarConf(sl_u32 type, std::vector<sl_u8> &outputBuf, const std::vector<sl_u8> &reserve = std::vector<sl_u8>(), sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result getLidarSampleDuration(float& sampleDurationRes, sl_u16 scanModeID, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result getMaxDistance(float &maxDistance, sl_u16 scanModeID, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result getScanModeAnsType(sl_u8 &ansType, sl_u16 scanModeID, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result getScanModeName(char* modeName, sl_u16 scanModeID, sl_u32 timeoutInMs = DEFAULT_TIMEOUT);
-
-    sl_result negotiateSerialBaudRate(sl_u32 requiredBaudRate, sl_u32 * baudRateDetected);
-
-private:
-
-    sl_result  _sendCommand(sl_u16 cmd, const void * payload = NULL, size_t payloadsize = 0 );
-
-    sl_result _waitResponseHeader(sl_lidar_ans_header_t * header, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    template <typename T>
-    sl_result _waitResponse(T &payload ,sl_u8 ansType, sl_u32 timeout = DEFAULT_TIMEOUT)
-    {
-        sl_lidar_ans_header_t response_header;
-        Result<std::nullptr_t> ans = SL_RESULT_OK;
-        //delay(100);
-        ans = _waitResponseHeader(&response_header, timeout);
-        if (!ans)
-            return ans;
-        // verify whether we got a correct header
-        if (response_header.type != ansType) {
-            return SL_RESULT_INVALID_DATA;
-        }
-       // delay(50);
-        sl_u32 header_size = (response_header.size_q30_subtype & SL_LIDAR_ANS_HEADER_SIZE_MASK);
-        if (header_size < sizeof(T)) {
-            return SL_RESULT_INVALID_DATA;
-        }
-        if (!_channel->waitForData(header_size, timeout)) {
-            return SL_RESULT_OPERATION_TIMEOUT;
-        }
-        _channel->read(reinterpret_cast<sl_u8 *>(&payload), sizeof(T));
-        return SL_RESULT_OK;
-    }
-
-    void _disableDataGrabbing();
-    sl_result _waitNode(sl_lidar_response_measurement_node_t * node, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result _waitScanData(sl_lidar_response_measurement_node_t * nodebuffer, size_t & count, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result _cacheScanData();
-
-    void _ultraCapsuleToNormal(const sl_lidar_response_ultra_capsule_measurement_nodes_t & capsule, sl_lidar_response_measurement_node_hq_t *nodebuffer, size_t &nodeCount);
-
-    sl_result _waitCapsuledNode(sl_lidar_response_capsule_measurement_nodes_t & node, sl_u32 timeout = DEFAULT_TIMEOUT);
-    void _capsuleToNormal(const sl_lidar_response_capsule_measurement_nodes_t & capsule, sl_lidar_response_measurement_node_hq_t *nodebuffer, size_t &nodeCount);
-
-    void _dense_capsuleToNormal(const sl_lidar_response_capsule_measurement_nodes_t & capsule, sl_lidar_response_measurement_node_hq_t *nodebuffer, size_t &nodeCount);
-
-    sl_result _cacheCapsuledScanData();
-
-    sl_result _waitHqNode(sl_lidar_response_hq_capsule_measurement_nodes_t & node, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    void _HqToNormal(const sl_lidar_response_hq_capsule_measurement_nodes_t & node_hq, sl_lidar_response_measurement_node_hq_t *nodebuffer, size_t &nodeCount);
-
-    sl_result _cacheHqScanData();
-
-    sl_result _waitUltraCapsuledNode(sl_lidar_response_ultra_capsule_measurement_nodes_t & node, sl_u32 timeout = DEFAULT_TIMEOUT);
-
-    sl_result _cacheUltraCapsuledScanData();
-    sl_result _clearRxDataCache();
-
-private:
-    IChannel *_channel;
-    bool _isConnected;
-    bool _isScanning;
-    MotorCtrlSupport        _isSupportingMotorCtrl;
-    rp::hal::Locker         _lock;
-    rp::hal::Event          _dataEvt;
-    rp::hal::Thread         _cachethread;
-    sl_u16                  _cached_sampleduration_std;
-    sl_u16                  _cached_sampleduration_express;
-    bool                    _scan_node_synced;
-
-    sl_lidar_response_measurement_node_hq_t   _cached_scan_node_hq_buf[8192];
-    size_t                                   _cached_scan_node_hq_count;
-    sl_u8                                    _cached_capsule_flag;
-
-    sl_lidar_response_measurement_node_hq_t   _cached_scan_node_hq_buf_for_interval_retrieve[8192];
-    size_t                                   _cached_scan_node_hq_count_for_interval_retrieve;
-
-    sl_lidar_response_capsule_measurement_nodes_t       _cached_previous_capsuledata;
-    sl_lidar_response_dense_capsule_measurement_nodes_t _cached_previous_dense_capsuledata;
-    sl_lidar_response_ultra_capsule_measurement_nodes_t _cached_previous_ultracapsuledata;
-    sl_lidar_response_hq_capsule_measurement_nodes_t _cached_previous_Hqdata;
-    bool                                         _is_previous_capsuledataRdy;
-    bool                                         _is_previous_HqdataRdy;
-};
     /**
     * Create a LIDAR driver instance
     *
