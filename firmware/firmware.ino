@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "TimerMs.h"
 #include "global.h"
 #include "motor.h"
 #include "kadyrovlcd.h"
@@ -21,8 +20,6 @@ const unsigned char BALL_PASSED = 14;
 #define MAIN_LOOP_DELAY 50
 #define DEBUG_LOOP_DELAY 1500
 
-TimerMs mainTimer(MAIN_LOOP_DELAY, 1, 0);
-TimerMs debugTimer(DEBUG_LOOP_DELAY, 1, 0);
 KadyrovLcd lcd(KadyrovLcd::Address::OLD);
 
 void callback(const bigbang_eurobot::ArduinoCommand &command);
@@ -184,9 +181,6 @@ void debugLoop()
       if(servos[i]) servos[i]->disabled = false;
     }
   }
-  //logMotor(0);
-  //logMotor(1);
-  //logMotor(2);
 }
 
 void publishCode(signed char info) 
