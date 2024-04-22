@@ -1,0 +1,3 @@
+[submodule "submodule/ros-iface"]
+	path = submodule/ros-iface
+	url = git@github.com:cyanidle/ros-iface.git
