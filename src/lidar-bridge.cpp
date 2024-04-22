@@ -212,7 +212,7 @@ struct ParsedNode {
     float relTheta{};
 };
 
-static float toRadians(float degrees)
+static constexpr float toRadians(float degrees) noexcept
 {
     return (degrees * 6.283f / 360.f);
 }
@@ -225,7 +225,10 @@ struct Driver {
     std::unique_ptr<sl::ILidarDriver> driver;
     std::unique_ptr<sl::IChannel> chan;
 
-    Driver(Uri const& uri) : driver(*sl::createLidarDriver()) {
+    Driver(Uri const& uri, py::function _cb) :
+        driver(*sl::createLidarDriver()),
+        cb(std::move(_cb))
+    {
         chan.reset(connect(uri));
         auto result = Results(driver->connect(chan.get()));
         if (result & SL_RESULT_FAIL_BIT) {
@@ -269,11 +272,13 @@ struct Driver {
         if (thread.joinable()) {
             thread.join();
         }
+        driver.reset();
+        chan.reset();
     }
 };
 
 static unsigned handles = 0;
-static map<unsigned, Driver*> all;
+static map<unsigned, std::unique_ptr<Driver>> all;
 
 static void stop(unsigned handle) {
     auto it = all.find(handle);
@@ -286,7 +291,7 @@ static void stop(unsigned handle) {
 static unsigned start(std::string rawuri, py::function cb) {
     auto uri = Uri::Parse(rawuri);
     auto id = handles++;
-    all[id] = new Driver(uri);
+    all[id].reset(new Driver(uri, cb));
     return id;
 }
 
@@ -299,4 +304,10 @@ PYBIND11_MODULE(lidarbridge, m) {
     sdk.attr("major") = SL_LIDAR_SDK_VERSION_MAJOR;
     sdk.attr("minor") = SL_LIDAR_SDK_VERSION_MINOR;
     sdk.attr("patch") = SL_LIDAR_SDK_VERSION_PATCH;
+    auto cleanup_callback = []{
+        try {
+            lidarbridge::all.clear();
+        } catch (...) {}
+    };
+    m.add_object("_cleanup", py::capsule(cleanup_callback));
 }

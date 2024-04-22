@@ -28,7 +28,9 @@ target_link_libraries(lidarbridge PRIVATE
     fmt
     describe
     rplidar-sdk)
-set_property(TARGET lidarbridge PROPERTY PREFIX "")
+
+pybind11_extension(lidarbridge)
+
 if (UNIX)
     target_compile_options(fmt PRIVATE -fPIC)
     target_compile_options(rplidar-sdk PRIVATE -fPIC)
