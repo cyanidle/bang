@@ -1,6 +1,5 @@
 #include <Python.h>
 #include <pybind11/pybind11.h>
-#include <fmt/format.h>
 #include <atomic>
 #include <thread>
 #include <memory>
@@ -8,64 +7,14 @@
 #include <string>
 #include <vector>
 #include <string_view>
-#include <charconv>
-#include <filesystem>
-#include <describe/describe.hpp>
 #include "sl_lidar.h"
+#include "uri.hpp"
 
+using namespace bang;
 namespace py = pybind11;
-namespace fs = std::filesystem;
 
 namespace lidar
 {
-
-using std::string;
-using std::string_view;
-using std::vector;
-using std::map;
-using std::unique_ptr;
-
-//"serial:/dev/ttyACM0?baud=115200"
-struct Uri {
-    string scheme;
-    string path;
-    map<string, string, std::less<>> params;
-
-    static Uri Parse(string_view src) {
-        auto next = [&](char sep) {
-            auto found = src.find(sep);
-            auto res = src.substr(0, found);
-            if (found != string_view::npos) {
-                src = src.substr(found + 1);
-            } else {
-                src = {};
-            }
-            return res;
-        };
-        Uri res;
-        res.scheme = string{next(':')};
-        res.path = string{next('?')};
-        string_view param;
-        while((param = next('=')).size()) {
-            res.params[string{param}] = string{next('&')};
-        }
-        return res;
-    }
-};
-
-template<typename E>
-string_view PrintEnum(E e) {
-    string_view res;
-    if (!describe::enum_to_name(e, res)) {
-        res = "<invalid>";
-    }
-    return res;
-}
-
-template<typename...Args>
-auto Err(string_view fmt, Args const&...a) {
-    return std::runtime_error(fmt::format(fmt, a...));
-}
 
 namespace rp {
 
@@ -98,23 +47,6 @@ enum ModelFamily {
     SeriesT,
 };
 DESCRIBE(lidar::rp::ModelFamily, Unknown,SeriesA,SeriesS,SeriesT)
-
-template<typename Map, typename T>
-T GetOr(Map const& m, string_view k, T adef) {
-    if (auto it = m.find(k); it != m.end()) {
-        if constexpr (std::is_integral_v<T>) {
-            auto r = std::from_chars(it->second.data(), it->second.data() + it->second.size(), adef);
-            if (r.ec != std::errc{}) {
-                throw Err("Invalid param: {}", k);
-            }
-            return adef;
-        } else {
-            return it->second;
-        }
-    } else {
-        return adef;
-    }
-}
 
 static sl::IChannel* connect(Uri const& uri) {
     if (uri.scheme == "serial") {
