@@ -6,13 +6,13 @@
 typedef float float32_t;
 typedef double float64_t;
 
-struct Odom {
+struct MsgOdom {
     int8_t num;
     int8_t aux;
     uint16_t ddist_mm;
 };
 
-static inline size_t parse_Odom(Odom* out, const char* __restrict__ src, size_t size) {
+static inline size_t parse_MsgOdom(MsgOdom* out, const char* __restrict__ src, size_t size) {
     if (size < 4) return 0;
     memcpy(&out->num, src, sizeof(out->num));
     src += sizeof(out->num);
@@ -22,7 +22,7 @@ static inline size_t parse_Odom(Odom* out, const char* __restrict__ src, size_t 
     src += sizeof(out->ddist_mm);
     return 4;
 }
-static inline size_t dump_Odom(Odom* obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgOdom(MsgOdom* obj, char* __restrict__ buff, size_t size) {
     if (size < 4) return 0;
     memcpy(buff, &obj->num, sizeof(obj->num));
     buff += sizeof(obj->num);

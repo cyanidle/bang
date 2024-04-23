@@ -1,8 +1,10 @@
-#ifndef MOTOR_H
-#define MOTOR_H
+#pragma once
 
+#include <stdint.h>
+#include <stddef.h>
+#include <utility>
+#include <string.h>
 #include <Arduino.h>
-#include "global.h"
 
 #define MAX_PWM 255
 #define MAX_INTER_TERM 30000
@@ -19,7 +21,6 @@ struct ShieldPinout
 
 struct MotorParams
 {
-    uint8_t num;
     float radius;
     int angleDegrees;
     float interCoeff;
@@ -34,42 +35,27 @@ struct MotorParams
 class Motor
 {
 public:
-    Motor(const MotorParams &initStruct, const ShieldPinout &pinout) noexcept;
-    void updateParams(const MotorParams &initStruct) noexcept;
-    /// @brief Should be called at regular intervals
-    /// @return Traveled meters
-    float update() noexcept;
-    static inline int motorsCount() noexcept {
-        return MAX_MOTORS;
-    }
-    static Motor* getMotor(uint8_t index) noexcept {
-        return &motors[index];
-    }
-    static inline void speedCallback(float x, float y, float turn) noexcept {
-        turn = constrain(turn, -1, 1);
-        x = constrain(x, -1, 1);
-        y = constrain(y, -1, 1);
-        for (int i = 0; i < MAX_MOTORS; ++i) {
-            getMotor(i)->_speedCallback(x, y, turn);
-        }
-    } 
-    static inline void enable(bool state) noexcept {
-        for (int i = 0; i < MAX_MOTORS; ++i) {
-            getMotor(i)->enabled = state;
-        }
-    }
+    using Callback = void(void*);
+
+    Motor(uint8_t num, Callback cb);
+    void SetPinout(ShieldPinout const& params);
+    void SetParams(const MotorParams &initStruct);
+    float Update();
+    void SpeedCallback(float x, float y, float turn) noexcept;
+
+    // TODO: Sepate fields into anon structs
+    volatile unsigned long X = {};
     float targSpd  = {};
     float currSpd  = {};
     int dX = {};
     int pwm = {};
 private:
-    static Motor motors[3];
-    void _speedCallback(float x, float y, float turn) noexcept;
     inline void termsReset() noexcept;
     void PID() noexcept;
     
     const uint8_t num;
     /// @brief Params
+    Callback cb;
     const ShieldPinout pinout;
     MotorParams params;   
     float xCoeff;
@@ -83,13 +69,9 @@ private:
     float interTerm = {};
     float lastError = {};
     /// @brief Encoder states
-    volatile unsigned long X = {};
     unsigned long lastX = {};
     bool stopped = {};
     bool enabled = {true};
-
-    using callback = void(*)()noexcept;
-    static callback callbacks[3];
 
     template<int number>
     static void motor_cb() noexcept {
@@ -97,5 +79,21 @@ private:
     }
 };
 
+namespace detail {
 
-#endif
+template<int count, size_t...Is>
+Motor* make(Motor::Callback* cbs, std::index_sequence<Is...>) {
+    static Motor* all;
+    static Motor motors[count] = {Motor{cbs[Is] = []{
+        all[Is].X += digitalRead(all[Is].pinout.encoderB) == HIGH ? 1 : -1;
+    }}, ...};
+    return all = motors;
+}
+
+}
+
+template<int count>
+Motor* Make() {
+    static Motor::Callback cbs[count];
+    return detail::make(cbs, std::make_index_sequence<count>());
+}

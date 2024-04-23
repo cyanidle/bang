@@ -1,35 +1,25 @@
 #include "motor.h"
-#include "global.h"
 
-Motor Motor::motors[3]{
-  Motor{ MotorParams{ 0, 0.15, 90, 750, 600, 5, 1, 0.15, 0.55, 360 }, ShieldPinout{ 18, 31, 12, 34, 35 } },
-  Motor{ MotorParams{ 1, 0.15, 210, 750, 600, 5, 1, 0.15, 0.55, 360 }, ShieldPinout{ 19, 38, 8, 37, 36 } },
-  Motor{ MotorParams{ 2, 0.15, 330, 750, 600, 5, 1, 0.15, 0.55, 360 }, ShieldPinout{ 3, 49, 9, 43, 42 } },
-};
-
-float toRadians(float degrees)
+static float toRadians(float degrees)
 {
   return (degrees * 6.283f / 360.f);
 }
 
-Motor::callback Motor::callbacks[MAX_MOTORS] = { motor_cb<0>, motor_cb<1>, motor_cb<2> };
-
-Motor::Motor(const MotorParams& initStruct, const ShieldPinout& pinout)
-  : params(initStruct)
-  , pinout(pinout)
-  , xCoeff(cos(toRadians(initStruct.angleDegrees)))
-  , yCoeff(sin(toRadians(initStruct.angleDegrees)))
-  , num(initStruct.num)
+Motor::Motor(int8_t num, Callback cb) : 
+  num(num), cb(cb)
 {
-    pinMode(pinout.encoderB, INPUT);
-    pinMode(pinout.enable, OUTPUT);
-    pinMode(pinout.fwd, OUTPUT);
-    pinMode(pinout.back, OUTPUT);
-    attachInterrupt(digitalPinToInterrupt(pinout.encoderA), callbacks[num], RISING);
 }
 
-void Motor::updateParams(const MotorParams& initStruct)
-{
+void Motor::SetPinout(ShieldPinout const& pinout) {
+  this->pinout = pinout;
+  pinMode(pinout.encoderB, INPUT);
+  pinMode(pinout.enable, OUTPUT);
+  pinMode(pinout.fwd, OUTPUT);
+  pinMode(pinout.back, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(pinout.encoderA), cb, RISING);
+}
+
+void Motor::SetParams(const MotorParams &initStruct) {
   params = initStruct;
   xCoeff = cos(toRadians(initStruct.angleDegrees));
   yCoeff = sin(toRadians(initStruct.angleDegrees));
@@ -45,7 +35,7 @@ void Motor::PID()
   pwm = constrain(pwm, -MAX_PWM, MAX_PWM);
 }
 
-float Motor::update()
+float Motor::Update()
 {
   if (!enabled) {
     digitalWrite(pinout.enable, HIGH);
@@ -85,7 +75,7 @@ float Motor::update()
   return ddist;
 }
 
-void Motor::_speedCallback(float x, float y, float turn)
+void Motor::SpeedCallback(float x, float y, float turn)
 {
   if (!enabled) return;
   float spd = xCoeff * x * params.maxSpeed + yCoeff * y * params.maxSpeed;

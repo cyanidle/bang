@@ -3,17 +3,17 @@ import sys
 from dataclasses import dataclass, fields
 
 @dataclass
-class Odom:
+class MsgOdom:
     num: int
     aux: int
     ddist_mm: int
 
     @staticmethod
     def from_buffer(buff):
-        return Odom(*Odom._s.unpack(buff))
+        return MsgOdom(*MsgOdom._s.unpack(buff))
     def into_buffer(self):
-        return Odom._s.pack(getattr(self, n) for n in Odom._names)
+        return MsgOdom._s.pack(getattr(self, n) for n in MsgOdom._names)
 
-Odom._names = tuple(f.name for f in fields(Odom))
-Odom._s = struct.Struct("<bbH")
+MsgOdom._names = tuple(f.name for f in fields(MsgOdom))
+MsgOdom._s = struct.Struct("<bbH")
         

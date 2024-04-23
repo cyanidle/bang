@@ -42,7 +42,7 @@ if (UNIX)
     target_link_options(lidar PRIVATE -Wl,--no-undefined)
 endif()
 
-function(Generate source pyout cout)
+function(Generate name source pyout cout)
     if (pyout)
         list(APPEND kwargs --out_py ${pyout})
     endif()
@@ -53,6 +53,7 @@ function(Generate source pyout cout)
         COMMAND
             ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/submodule/ros-iface/generate.py
+            --name ${name}
             ${source}
             ${kwargs}
         ERROR_VARIABLE err
@@ -63,7 +64,8 @@ function(Generate source pyout cout)
 endfunction()
 
 foreach(name Move Odom Pid Servo)
-    Generate(${CMAKE_SOURCE_DIR}/msg/${name}.msg
+    Generate(Msg${name}
+        ${CMAKE_SOURCE_DIR}/msg/${name}.msg
         ${CMAKE_SOURCE_DIR}/script/gen/Msg${name}.py
         ${CMAKE_SOURCE_DIR}/firmware/Msg${name}.h)
     install(PROGRAMS script/gen/Msg${name}.py

@@ -1,6 +1,6 @@
 #include "kadyrovlcd.h"
-#include "global.h"
-void reverseArray(uint8_t a[], uint8_t n)
+
+static void reverseArray(uint8_t a[], uint8_t n)
 {
     int temp;
     for (int i = 0; i < n / 2; i++)
@@ -62,7 +62,7 @@ void KadyrovLcd::printDigit(int digit, int position){
         case 7: custom7(position); break;
         case 8: custom8(position); break;
         case 9: custom9(position); break;
-        default: nh.logerror("[Arduino:LCD] Digit out of range!");
+        default: break;
     }
 }
 
