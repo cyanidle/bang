@@ -21,29 +21,28 @@ CPMAddPackage("gh:pybind/pybind11@2.12.0")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
-add_library(lidarbridge SHARED src/lidar-bridge.cpp)
-target_link_libraries(lidarbridge PRIVATE
-    Python3::Python
-    pybind11_headers
-    fmt
-    describe
-    rplidar-sdk)
+add_library(lidar SHARED src/lidar.cpp)
+target_link_libraries(lidar PRIVATE
+    Python3::Python pybind11_headers fmt describe
+    rplidar-sdk
+)
 
-pybind11_extension(lidarbridge)
+pybind11_extension(lidar)
 
 if (UNIX)
     target_compile_options(fmt PRIVATE -fPIC)
     target_compile_options(rplidar-sdk PRIVATE -fPIC)
-    target_link_options(lidarbridge PRIVATE -Wl,--no-undefined)
+    target_link_options(lidar PRIVATE -Wl,--no-undefined)
 endif()
 
-function(Generate source out)
+function(Generate source pyout cout)
     execute_process(
         COMMAND
             ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/submodule/ros-iface/generate.py
             ${source}
-            -o ${out}
+            --out_py ${pyout}
+            --out_c ${cout}
         ERROR_VARIABLE err
     )
     if (err)
@@ -51,7 +50,21 @@ function(Generate source out)
     endif()
 endfunction()
 
-Generate(${CMAKE_SOURCE_DIR}/msg/Move.msg ${CMAKE_CURRENT_BINARY_DIR}/Gen/Move)
-Generate(${CMAKE_SOURCE_DIR}/msg/Servo.msg ${CMAKE_CURRENT_BINARY_DIR}/Gen/Servo)
-Generate(${CMAKE_SOURCE_DIR}/msg/Odom.msg ${CMAKE_CURRENT_BINARY_DIR}/Gen/Odom)
-Generate(${CMAKE_SOURCE_DIR}/msg/Pid.msg ${CMAKE_CURRENT_BINARY_DIR}/Gen/Pid)
+foreach(name Move Odom Pid Servo)
+    Generate(
+        ${CMAKE_SOURCE_DIR}/msg/${name}.msg
+        ${CMAKE_SOURCE_DIR}/script/Msg${name}.py
+        ${CMAKE_SOURCE_DIR}/firmware/Msg${name}.h)
+endforeach()
+
+install(TARGETS lidar DESTINATION bang)
+install(
+    PROGRAMS
+        script/bang.py
+        script/MsgMove.py
+        script/MsgOdom.py
+        script/MsgPid.py
+        script/MsgServo.py
+    DESTINATION bang
+    PERMISSIONS WORLD_EXECUTE
+    )

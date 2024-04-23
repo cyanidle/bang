@@ -16,7 +16,7 @@
 namespace py = pybind11;
 namespace fs = std::filesystem;
 
-namespace lidarbridge
+namespace lidar
 {
 
 using std::string;
@@ -67,9 +67,7 @@ auto Err(string_view fmt, Args const&...a) {
     return std::runtime_error(fmt::format(fmt, a...));
 }
 
-struct Spinner {
-    virtual ~Spinner() = default;
-};
+namespace rp {
 
 enum MinimumIds {
     LIDAR_A_SERIES_MINUM_MAJOR_ID = 0,
@@ -89,7 +87,7 @@ enum Results : int64_t {
     ResultInsufficientMemory = (0x8006 | SL_RESULT_FAIL_BIT),
 };
 
-DESCRIBE(lidarbridge::Results, ResultOk,ResultAlreadyDone,ResultInvalidData
+DESCRIBE(lidar::rp::Results, ResultOk,ResultAlreadyDone,ResultInvalidData
 ,ResultOperationFail,ResultOperationTimeout,ResultOperationStop
 ,ResultOperationNotSupported,ResultFormatNotSupported,ResultInsufficientMemory)
 
@@ -99,7 +97,7 @@ enum ModelFamily {
     SeriesS,
     SeriesT,
 };
-DESCRIBE(lidarbridge::ModelFamily, Unknown,SeriesA,SeriesS,SeriesT)
+DESCRIBE(lidar::rp::ModelFamily, Unknown,SeriesA,SeriesS,SeriesT)
 
 template<typename Map, typename T>
 T GetOr(Map const& m, string_view k, T adef) {
@@ -221,14 +219,14 @@ struct Driver {
     std::atomic<bool> shutdown = false;
     std::thread thread;
     LidarInfo info;
-    py::function cb;
     std::unique_ptr<sl::ILidarDriver> driver;
     std::unique_ptr<sl::IChannel> chan;
+    int rpm = 600;
 
-    Driver(Uri const& uri, py::function _cb) :
-        driver(*sl::createLidarDriver()),
-        cb(std::move(_cb))
+    Driver(string rawuri) :
+        driver(*sl::createLidarDriver())
     {
+        auto uri = Uri::Parse(rawuri);
         chan.reset(connect(uri));
         auto result = Results(driver->connect(chan.get()));
         if (result & SL_RESULT_FAIL_BIT) {
@@ -237,8 +235,9 @@ struct Driver {
         info = getInfo(*driver);
         checkHealth(*driver);
         initMode(*driver, GetOr(uri.params, "mode", string{"DenseBoost"}));
+        rpm = GetOr(uri.params, "rpm", rpm);
         if (!info.needsTune) {
-            driver->setMotorSpeed(GetOr(uri.params, "rpm", 600));
+            driver->setMotorSpeed(rpm);
         }
         thread = std::thread(&Driver::spin, this);
     }
@@ -252,22 +251,36 @@ struct Driver {
             node.relTheta = toRadians(nodes[i].angle_z_q14 * 90.f / 16384.f);
             result[i] = py::make_tuple(node.range, node.intensity, node.relTheta);
         }
-        cb(result);
+        scan(result);
     }
     void spin() {
         size_t count = 8192UL;
         std::vector<sl_lidar_response_measurement_node_hq_t> nodes(count);
         while (!shutdown.load(std::memory_order_relaxed)) {
-            if (driver->grabScanDataHq(nodes.data(), count) & SL_RESULT_FAIL_BIT) {
+            if (auto err = Results(driver->grabScanDataHq(nodes.data(), count)); err & SL_RESULT_FAIL_BIT) {
+                py::gil_scoped_acquire lock;
+                error(fmt::format("Error in AscendScan: {}", PrintEnum(err)));
                 continue;
             }
-            if (driver->ascendScanData(nodes.data(), count) & SL_RESULT_FAIL_BIT) {
+            if (std::exchange(info.needsTune, false)) {
+                driver->setMotorSpeed(rpm);
+                continue;
+            }
+            if (auto err = Results(driver->ascendScanData(nodes.data(), count)); err & SL_RESULT_FAIL_BIT) {
+                py::gil_scoped_acquire lock;
+                error(fmt::format("Error in AscendScan: {}", PrintEnum(err)));
                 continue;
             }
             runCb(nodes.data(), count);
         }
     }
-    ~Driver() {
+
+    virtual void scan(py::tuple) = 0;
+    virtual void error(string msg) {
+        py::print("RPLidar error not handled: ", msg);
+    }
+
+    virtual ~Driver() {
         shutdown = true;
         if (thread.joinable()) {
             thread.join();
@@ -277,37 +290,26 @@ struct Driver {
     }
 };
 
-static unsigned handles = 0;
-static map<unsigned, std::unique_ptr<Driver>> all;
+struct PyDriver : Driver {
+    using Driver::Driver;
 
-static void stop(unsigned handle) {
-    auto it = all.find(handle);
-    if (it == all.end()) {
-        throw Err("Invalid handle: {}", handle);
+    void scan(py::tuple data) override {
+        PYBIND11_OVERRIDE_PURE(void, Driver, scan, data);
     }
-    all.erase(it);
-}
+    void error(string msg) override {
+        PYBIND11_OVERRIDE(void, Driver, error, msg);
+    }
+};
 
-static unsigned start(std::string rawuri, py::function cb) {
-    auto uri = Uri::Parse(rawuri);
-    auto id = handles++;
-    all[id].reset(new Driver(uri, cb));
-    return id;
-}
-
+} //rp
 } //lidarbridge
 
-PYBIND11_MODULE(lidarbridge, m) {
-    m.def("start", &lidarbridge::start, "start listening for msgs", py::arg("uri"), py::arg("callback"));
-    m.def("stop", &lidarbridge::stop, "stop listening for msgs by handle", py::arg("handle"));
-    auto sdk = m.def_submodule("sdk");
-    sdk.attr("major") = SL_LIDAR_SDK_VERSION_MAJOR;
-    sdk.attr("minor") = SL_LIDAR_SDK_VERSION_MINOR;
-    sdk.attr("patch") = SL_LIDAR_SDK_VERSION_PATCH;
-    auto cleanup_callback = []{
-        try {
-            lidarbridge::all.clear();
-        } catch (...) {}
-    };
-    m.add_object("_cleanup", py::capsule(cleanup_callback));
+PYBIND11_MODULE(lidar, m) {
+    auto cls = py::class_<lidar::rp::Driver, lidar::rp::PyDriver>(m, "RP")
+        .def(py::init<std::string>(), "Create Driver with specified device URI", py::arg("uri"))
+        .def("scan", &lidar::rp::Driver::scan, "Override to handle scan data", py::arg("data"))
+        .def("error", &lidar::rp::Driver::error, "Override to handle error messages", py::arg("msg"));
+    cls.attr("vmajor") = SL_LIDAR_SDK_VERSION_MAJOR;
+    cls.attr("vminor") = SL_LIDAR_SDK_VERSION_MINOR;
+    cls.attr("vpatch") = SL_LIDAR_SDK_VERSION_PATCH;
 }
