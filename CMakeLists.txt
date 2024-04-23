@@ -6,14 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(submodule/lidar-sdk)
 
-# CPM
-file(DOWNLOAD
-  https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.38.3/CPM.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake
-  EXPECTED_HASH SHA256=cc155ce02e7945e7b8967ddfaff0b050e958a723ef7aad3766d368940cb15494
-)
-
-include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
+include(./cmake/utils/GetCPM.cmake)
 
 CPMAddPackage("gh:cyanidle/describe#1.0.0")
 CPMAddPackage("gh:fmtlib/fmt#10.2.0")

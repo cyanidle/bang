@@ -1,3 +1,6 @@
 [submodule "submodule/ros-iface"]
 	path = submodule/ros-iface
 	url = git@github.com:cyanidle/ros-iface.git
+[submodule "cmake/utils"]
+	path = cmake/utils
+	url = git@github.com:cyanidle/cmake_utils.git
