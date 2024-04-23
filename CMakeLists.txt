@@ -66,16 +66,12 @@ foreach(name Move Odom Pid Servo)
     Generate(${CMAKE_SOURCE_DIR}/msg/${name}.msg
         ${CMAKE_SOURCE_DIR}/script/gen/Msg${name}.py
         ${CMAKE_SOURCE_DIR}/firmware/Msg${name}.h)
+    install(PROGRAMS script/gen/Msg${name}.py
+        DESTINATION bang/gen
+        PERMISSIONS WORLD_EXECUTE)
 endforeach()
 
 install(TARGETS lidar arduino DESTINATION bang)
-install(
-    PROGRAMS
-        script/bang.py
-        script/MsgMove.py
-        script/MsgOdom.py
-        script/MsgPid.py
-        script/MsgServo.py
+install(PROGRAMS script/bang.py
     DESTINATION bang
-    PERMISSIONS WORLD_EXECUTE
-    )
+    PERMISSIONS WORLD_EXECUTE)
