@@ -5,7 +5,7 @@ static float toRadians(float degrees)
   return (degrees * 6.283f / 360.f);
 }
 
-Motor::Motor(int8_t num, Callback cb) : 
+Motor::Motor(uint8_t num, Callback cb) :
   num(num), cb(cb)
 {
 }
@@ -38,6 +38,7 @@ void Motor::PID()
 float Motor::Update()
 {
   if (!enabled) {
+    dX = X = 0;
     digitalWrite(pinout.enable, HIGH);
     digitalWrite(pinout.fwd, HIGH);
     digitalWrite(pinout.back, HIGH);
@@ -75,7 +76,7 @@ float Motor::Update()
   return ddist;
 }
 
-void Motor::SpeedCallback(float x, float y, float turn)
+void Motor::SpeedCallback(float x, float y, float turn) noexcept
 {
   if (!enabled) return;
   float spd = xCoeff * x * params.maxSpeed + yCoeff * y * params.maxSpeed;
@@ -102,7 +103,7 @@ void Motor::SpeedCallback(float x, float y, float turn)
   targSpd = spd;
 }
 
-inline void Motor::termsReset()
+void Motor::termsReset() noexcept
 {
   // logInt("Motor %d: Terms Reset!", num);
   lastError = 0;

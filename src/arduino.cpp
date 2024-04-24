@@ -23,6 +23,7 @@ namespace arduino {
 
 enum Flags : uint16_t {
     Request = 1,
+    Ack = Request,
 };
 
 struct SLIP {
@@ -30,7 +31,39 @@ struct SLIP {
     static constexpr char ESC = char(0xDB);
     static constexpr char EscapedEnd = char(0xDC);
     static constexpr char EscapedEsc = char(0xDD);
+
+    static string_view DeEscape(std::string& msg) {
+        size_t pos = 0;
+        bool esc = false;
+        fmt::print(stderr, "Original: [{:x}]\n", fmt::join(msg, ","));
+        for (auto ch: msg) {
+            if (ch == char(SLIP::ESC)) {
+                if (esc) {
+                    throw Err("Escape byte right after another ESC");
+                }
+                esc = true;
+                continue;
+            } else if (ch == END) {
+
+            }
+            if (std::exchange(esc, false)) {
+                msg[pos++] = [&]{
+                    switch (ch) {
+                    case SLIP::EscapedEnd: return SLIP::END;
+                    case SLIP::EscapedEsc: return SLIP::ESC;
+                    default: throw Err("Invalid escaped byte: {}", ch);
+                    }
+                }();
+            } else {
+                msg[pos++] = ch;
+            }
+        }
+        auto result = string_view{msg.c_str(), pos};
+        fmt::print(stderr, "DeEscaped: [{:x}]\n", fmt::join(result, ","));
+        return result;
+    }
 };
+
 
 struct Channel {
     asio::io_context io;
@@ -75,51 +108,26 @@ struct Channel {
             readDone(ec, sz);
         });
     }
-    void deescMsg(string& msg) {
-        size_t pos = 0;
-        bool esc = false;
-        fmt::print(stderr, "Original: [{:x}]\n", fmt::join(msg, ","));
-        for (auto ch: msg) {
-            if (ch == char(SLIP::ESC)) {
-                if (esc) {
-                    throw Err("Escape byte right after another ESC");
-                }
-                esc = true;
-                continue;
-            }
-            if (std::exchange(esc, false)) {
-                msg[pos++] = [&]{
-                    switch (ch) {
-                    case SLIP::EscapedEnd: return SLIP::END;
-                    case SLIP::EscapedEsc: return SLIP::ESC;
-                    default: throw Err("Invalid escaped byte: {}", ch);
-                    }
-                }();
-            } else {
-                msg[pos++] = ch;
-            }
-        }
-        handleMsg(string_view{msg.c_str(), pos});
-    }
 
     void handleMsg(string_view msg) {
-        fmt::print(stderr, "DeEscaped: [{:x}]\n", fmt::join(msg, ","));
         if (msg.size() < 8) {
-            // TODO: msg too small
-            return;
+            throw Err("Msg is too small: {} < 8", msg.size());
         }
         auto p = reinterpret_cast<const uint8_t*>(msg.data());
         auto id = boost::endian::load_little_u32(p);
         auto type = boost::endian::load_little_u16(p + 4);
         auto flags = boost::endian::load_little_u16(p + 6);
         py::gil_scoped_acquire lock;
-        if (flags & Request) {
-            // TODO: this callback can outlive class
-            message(type, py::bytes(msg.substr(8)), [this, id](int type, py::bytes body){
-                doSend(type, body, {}, id);
-            });
+        if (flags & Ack) {
+            if (msg.size() != 8) {
+                throw Err("Received ACK which is too long: {}", msg.size());
+            }
+            if (auto it = cbs.find(id); it != cbs.end()) {
+                it->second();
+                cbs.erase(it);
+            }
         } else {
-            message(type, py::bytes(msg.substr(8)), std::nullopt);
+            message(type, py::bytes(msg.substr(8)));
         }
     }
 
@@ -136,7 +144,7 @@ struct Channel {
         size_t next;
         while((next = buffview.find_first_of(SLIP::END)) != string::npos) {
             current += buffview.substr(0, next);
-            deescMsg(current);
+            handleMsg(SLIP::DeEscape(current));
             current.clear();
             if (next == buffview.size()) {
                 buffview = {};
@@ -204,7 +212,7 @@ struct Channel {
         });
     }
 
-    virtual void message(int type, py::bytes body, std::optional<py::cpp_function> reply) = 0;
+    virtual void message(int type, py::bytes body) = 0;
     virtual void error(string msg) {
         py::print("Error: In communication with arduino: ", msg);
     }
@@ -212,8 +220,8 @@ struct Channel {
 
 struct PyChannel : Channel {
     using Channel::Channel;
-    void message(int type, py::bytes body, std::optional<py::cpp_function> reply) override {
-        PYBIND11_OVERRIDE_PURE(void, Channel, message, type, body, reply);
+    void message(int type, py::bytes body) override {
+        PYBIND11_OVERRIDE_PURE(void, Channel, message, type, body);
     }
     void error(string msg) override {
         PYBIND11_OVERRIDE(void, Channel, error, msg);
@@ -227,7 +235,7 @@ using namespace py::literals;
 PYBIND11_MODULE(arduino, m) {
     py::class_<arduino::Channel, arduino::PyChannel>(m, "Channel")
         .def(py::init<string>(), "Create comms Channel with device on uri")
-        .def("message", &arduino::Channel::message, "Override to handle incoming packets", "type"_a, "body"_a, "reply"_a.none())
+        .def("message", &arduino::Channel::message, "Override to handle incoming packets", "type"_a, "body"_a)
         .def("error", &arduino::Channel::error, "Override to handle errors", "msg"_a)
         .def("send", &arduino::Channel::send, "Send packet with optional ack callback", "type"_a, "body"_a, "ack"_a.none());
 }

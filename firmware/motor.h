@@ -2,13 +2,14 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <utility>
 #include <string.h>
 #include <Arduino.h>
+#include "utility.hpp"
 
 #define MAX_PWM 255
 #define MAX_INTER_TERM 30000
 #define MAX_MOTORS 3
+
 
 struct ShieldPinout
 {
@@ -35,7 +36,7 @@ struct MotorParams
 class Motor
 {
 public:
-    using Callback = void(void*);
+    using Callback = void(*)();
 
     Motor(uint8_t num, Callback cb);
     void SetPinout(ShieldPinout const& params);
@@ -49,14 +50,17 @@ public:
     float currSpd  = {};
     int dX = {};
     int pwm = {};
+    const ShieldPinout& GetPinout() const noexcept {
+        return pinout;
+    }
 private:
-    inline void termsReset() noexcept;
+    void termsReset() noexcept;
     void PID() noexcept;
     
     const uint8_t num;
     /// @brief Params
     Callback cb;
-    const ShieldPinout pinout;
+    const ShieldPinout pinout = {};
     MotorParams params;   
     float xCoeff;
     float yCoeff;
@@ -72,28 +76,27 @@ private:
     unsigned long lastX = {};
     bool stopped = {};
     bool enabled = {true};
-
-    template<int number>
-    static void motor_cb() noexcept {
-        getMotor(number)->X += (digitalRead(getMotor(number)->pinout.encoderB) == HIGH)? 1 : -1;
-    }
 };
 
 namespace detail {
 
-template<int count, size_t...Is>
-Motor* make(Motor::Callback* cbs, std::index_sequence<Is...>) {
-    static Motor* all;
-    static Motor motors[count] = {Motor{cbs[Is] = []{
-        all[Is].X += digitalRead(all[Is].pinout.encoderB) == HIGH ? 1 : -1;
-    }}, ...};
+static Motor* all;
+
+template<size_t I>
+void doRead() {
+    all[I].X += digitalRead(all[I].GetPinout().encoderB) == HIGH ? 1 : -1;
+}
+
+template<size_t count, size_t...Is>
+Motor* make(IndexSeq<Is...>) {
+    static Motor::Callback cbs[count] = {doRead<Is>...};
+    static Motor motors[count] = {Motor(Is, cbs[Is])...};
     return all = motors;
 }
 
 }
 
-template<int count>
+template<size_t count>
 Motor* Make() {
-    static Motor::Callback cbs[count];
-    return detail::make(cbs, std::make_index_sequence<count>());
+    return detail::make<count>(MakeSeq<count>());
 }
