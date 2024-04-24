@@ -7,7 +7,7 @@ typedef float float32_t;
 typedef double float64_t;
 
 typedef enum {
-    Type = 4,
+    MsgServo_Type = 4,
 } MsgServo_;
 
 struct MsgServo {
