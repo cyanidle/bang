@@ -1,6 +1,7 @@
 import struct
 import sys
 from dataclasses import dataclass, fields
+from typing import ClassVar
 
 @dataclass
 class MsgPid:
@@ -8,6 +9,7 @@ class MsgPid:
     p: int
     i: int
     d: int
+    Type: ClassVar[int] = 3
 
     @staticmethod
     def from_buffer(buff):

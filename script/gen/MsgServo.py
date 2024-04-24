@@ -1,11 +1,13 @@
 import struct
 import sys
 from dataclasses import dataclass, fields
+from typing import ClassVar
 
 @dataclass
 class MsgServo:
     servo: int
     pos: int
+    Type: ClassVar[int] = 4
 
     @staticmethod
     def from_buffer(buff):

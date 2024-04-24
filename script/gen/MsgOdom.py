@@ -1,12 +1,14 @@
 import struct
 import sys
 from dataclasses import dataclass, fields
+from typing import ClassVar
 
 @dataclass
 class MsgOdom:
     num: int
     aux: int
     ddist_mm: int
+    Type: ClassVar[int] = 2
 
     @staticmethod
     def from_buffer(buff):

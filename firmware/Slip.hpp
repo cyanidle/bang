@@ -1,77 +1,97 @@
 #pragma once
+#include <stdint.h>
+#include <stddef.h>
 
-namespace SLIP
-{
+using SlipHandler = void(*)(char*, size_t);
 
-static constexpr char END = char(0xC0);
-static constexpr char ESC = char(0xDB);
-static constexpr char EscapedEnd = char(0xDC);
-static constexpr char EscapedEsc = char(0xDD);
+template<SlipHandler handler, size_t Buff = 256>
+struct Slip {
+    static constexpr char END = char(0xC0);
+    static constexpr char ESC = char(0xDB);
+    static constexpr char EscapedEnd = char(0xDC);
+    static constexpr char EscapedEsc = char(0xDD);
+protected:
+    char buff[Buff];
+    size_t ptr = 0;
+    bool esc = 0;
+    bool err = false;
 
-struct Result {
-    enum Status {
-        Ok = 0,
-        NoTerminator,
-        DoubleEscape,
-        InvalidEscape,
-        UnterminatedEscape,
-    };
-    Status status = {};
-    const char *begin = nullptr;
-    const char *end = nullptr;
-    
-    Result(Status s, const char* b, const char* p) : 
-      status(s), begin(b), end(p) 
-    {}
-
-    explicit operator bool() const noexcept {
-      return status == Ok;
-    }
-};
-
-inline Result DeEscape(char* begin, const char* end) {
-    auto ptr = begin;
-    bool esc = false;
-    for(auto curr = begin; curr != end; ++curr) {
-        char ch = *curr;
-        switch(ch) {
-          case ESC: {
-            if (esc) {
-                return Result{Result::DoubleEscape, begin, begin};
-            }
-            esc = true;
-            continue;
-          }
-          case END: {
-            if (esc) {
-              return Result{Result::InvalidEscape, begin, begin};
-            }
-            return Result{Result::Ok, begin, ptr};
-          }
+    bool checkFull() noexcept {
+        if (ptr == sizeof(buff)) {
+            err = true;
+            return true;
         }
-        if (esc) {
+        return false;
+    }
+
+    void handleChar(char ch) noexcept {
+        if (err & ch == END) {
+            ptr = 0;
+            err = false;
+        } else if (esc) {
             esc = false;
-            switch (ch) {
-            case EscapedEnd: {
-                *ptr++ = END;
-                break;
+            if (checkFull()) {
+                return;
             }
-            case EscapedEsc: {
-                *ptr++ = ESC;
+            switch (ch) {
+            case EscapedEsc:
+                buff[ptr++] = ESC;
+                break;
+            case EscapedEnd: {
+                buff[ptr++] = END;
                 break;
             }
             default: {
-                return Result{Result::InvalidEscape, begin, begin};
+                err = true;
             }
             }
-        } else {
-            *ptr++ = ch;
+        } else if (ch == END) {
+            handler(buff, ptr);
+            ptr = 0;
+        } else if (ch == ESC) {
+            esc = true;
+        } else if (!checkFull()) {
+            buff[ptr++] = ch;
         }
     }
-    if (esc) {
-        return Result{Result::UnterminatedEscape, begin, begin};
+public:
+    Slip() = default;
+    void Read() {
+        char buff[100];
+        auto av = Serial.available();
+        while (av) {
+            auto batch = min(sizeof(buff), av);
+            Serial.readBytes(buff, batch);
+            for (size_t i = 0; i < batch; ++i) {
+                handleChar(buff[i]);
+            }
+            av -= batch;
+        }
     }
-    return Result{Result::NoTerminator, begin, begin};
-}
-
-}
+    static void Write(const char* data, size_t size) {
+        size_t av = Serial.availableForWrite();
+        for (size_t i = 0; i < size; ++i) {
+            while (av < 4) {
+                av = Serial.availableForWrite();
+            }
+            char ch = data[i];
+            switch (ch) {
+            case END: {
+                Serial.write(ESC);
+                Serial.write(EscapedEnd);
+                break;
+            }
+            case ESC: {
+                Serial.write(ESC);
+                Serial.write(EscapedEsc);
+                break;
+            }
+            default: {
+                Serial.write(ch);
+                break;
+            }
+            }
+        }
+        Serial.write(END);
+    }
+};

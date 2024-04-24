@@ -6,6 +6,10 @@
 typedef float float32_t;
 typedef double float64_t;
 
+typedef enum {
+    Type = 2,
+} MsgOdom_;
+
 struct MsgOdom {
     int8_t num;
     int8_t aux;
@@ -22,6 +26,7 @@ static inline size_t parse_MsgOdom(MsgOdom* out, const char* __restrict__ src, s
     src += sizeof(out->ddist_mm);
     return 4;
 }
+
 static inline size_t dump_MsgOdom(MsgOdom* obj, char* __restrict__ buff, size_t size) {
     if (size < 4) return 0;
     memcpy(buff, &obj->num, sizeof(obj->num));

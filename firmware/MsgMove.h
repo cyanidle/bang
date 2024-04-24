@@ -6,6 +6,10 @@
 typedef float float32_t;
 typedef double float64_t;
 
+typedef enum {
+    Type = 1,
+} MsgMove_;
+
 struct MsgMove {
     uint16_t x;
     uint16_t y;
@@ -22,6 +26,7 @@ static inline size_t parse_MsgMove(MsgMove* out, const char* __restrict__ src, s
     src += sizeof(out->theta);
     return 6;
 }
+
 static inline size_t dump_MsgMove(MsgMove* obj, char* __restrict__ buff, size_t size) {
     if (size < 6) return 0;
     memcpy(buff, &obj->x, sizeof(obj->x));
