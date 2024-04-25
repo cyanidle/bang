@@ -69,7 +69,7 @@ foreach(name ${MSGS})
     Generate(Msg${name}
         ${CMAKE_SOURCE_DIR}/msg/${name}.msg
         ${CMAKE_SOURCE_DIR}/script/gen/Msg${name}.py
-        ${CMAKE_SOURCE_DIR}/firmware/Msg${name}.h)
+        ${CMAKE_SOURCE_DIR}/firmware/gen/Msg${name}.h)
     install(PROGRAMS script/gen/Msg${name}.py
         DESTINATION bang/gen
         PERMISSIONS WORLD_EXECUTE)

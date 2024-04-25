@@ -9,13 +9,13 @@
 #include "kadyrovlcd.h"
 #include "servo.hpp"
 
-#include "MsgMove.h"
-#include "MsgOdom.h"
-#include "MsgPid.h"
-#include "MsgServo.h"
-#include "MsgConfigServo.h"
-#include "MsgConfigMotor.h"
-#include "MsgTest.h"
+#include "gen/MsgMove.h"
+#include "gen/MsgOdom.h"
+#include "gen/MsgPid.h"
+#include "gen/MsgServo.h"
+#include "gen/MsgConfigServo.h"
+#include "gen/MsgConfigMotor.h"
+#include "gen/MsgTest.h"
 
 const unsigned char OK_CODE = 11;
 const unsigned char START_PIN_PRESENT = 12;
