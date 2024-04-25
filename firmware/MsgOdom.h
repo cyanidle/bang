@@ -16,7 +16,7 @@ struct MsgOdom {
     uint16_t ddist_mm;
 };
 
-static inline size_t parse_MsgOdom(MsgOdom* out, const char* __restrict__ src, size_t size) {
+static inline size_t parse_MsgOdom(MsgOdom* __restrict__ out, const char* __restrict__ src, size_t size) {
     if (size < 4) return 0;
     memcpy(&out->num, src, sizeof(out->num));
     src += sizeof(out->num);
@@ -27,7 +27,7 @@ static inline size_t parse_MsgOdom(MsgOdom* out, const char* __restrict__ src, s
     return 4;
 }
 
-static inline size_t dump_MsgOdom(MsgOdom* obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgOdom(MsgOdom* __restrict__ obj, char* __restrict__ buff, size_t size) {
     if (size < 4) return 0;
     memcpy(buff, &obj->num, sizeof(obj->num));
     buff += sizeof(obj->num);

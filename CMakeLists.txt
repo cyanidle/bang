@@ -42,6 +42,8 @@ if (UNIX)
     target_link_options(lidar PRIVATE -Wl,--no-undefined)
 endif()
 
+set(MSGS Move Odom Pid Servo ConfigMotor ConfigServo)
+
 function(Generate name source pyout cout)
     if (pyout)
         list(APPEND kwargs --out_py ${pyout})
@@ -63,7 +65,7 @@ function(Generate name source pyout cout)
     endif()
 endfunction()
 
-foreach(name Move Odom Pid Servo)
+foreach(name ${MSGS})
     Generate(Msg${name}
         ${CMAKE_SOURCE_DIR}/msg/${name}.msg
         ${CMAKE_SOURCE_DIR}/script/gen/Msg${name}.py

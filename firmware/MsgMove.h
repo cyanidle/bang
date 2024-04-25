@@ -16,7 +16,7 @@ struct MsgMove {
     uint16_t theta;
 };
 
-static inline size_t parse_MsgMove(MsgMove* out, const char* __restrict__ src, size_t size) {
+static inline size_t parse_MsgMove(MsgMove* __restrict__ out, const char* __restrict__ src, size_t size) {
     if (size < 6) return 0;
     memcpy(&out->x, src, sizeof(out->x));
     src += sizeof(out->x);
@@ -27,7 +27,7 @@ static inline size_t parse_MsgMove(MsgMove* out, const char* __restrict__ src, s
     return 6;
 }
 
-static inline size_t dump_MsgMove(MsgMove* obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgMove(MsgMove* __restrict__ obj, char* __restrict__ buff, size_t size) {
     if (size < 6) return 0;
     memcpy(buff, &obj->x, sizeof(obj->x));
     buff += sizeof(obj->x);

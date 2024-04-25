@@ -105,11 +105,6 @@ static void SendAck(uint32_t id) {
   slip.Write(buff, sizeof(buff));
 }
 
-static void Handle(Msg& msg) {
-  digitalWrite(LED_BUILTIN, bool(msg.type));
-
-}
-
 static Motor* motors = Make<MOTORS_COUNT>();
 static Servo& GetServo(int num) {
     static Servo servos[MAX_SERVOS];
@@ -122,5 +117,23 @@ static void Update() {
   }
   for (auto i = 0; i < MOTORS_COUNT; ++i) {
     motors[i].Update();
+  }
+}
+
+static void Handle(Msg& msg) {
+  switch (msg.type) {
+  case MsgPid_Type: {
+
+    break;
+  }
+  case MsgServo_Type: {
+
+    break;
+  }
+  case MsgMove_Type: {
+    
+    break;
+  }
+  default: break;
   }
 }
