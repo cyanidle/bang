@@ -13,6 +13,9 @@
 #include "MsgOdom.h"
 #include "MsgPid.h"
 #include "MsgServo.h"
+#include "MsgConfigServo.h"
+#include "MsgConfigMotor.h"
+#include "MsgTest.h"
 
 const unsigned char OK_CODE = 11;
 const unsigned char START_PIN_PRESENT = 12;
@@ -48,8 +51,8 @@ bool debounce(PinState& state) {
 static KadyrovLcd lcd(KadyrovLcd::Address::OLD);
 
 struct Msg;
-void Update();
-void Handle(Msg& msg);
+static void Update();
+static void Handle(Msg& msg);
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -120,18 +123,71 @@ static void Update() {
   }
 }
 
+#define DESERIALIZE(T) [&]{T res; parse_##T(&res, msg.body, msg.size); return res;}()
+
 static void Handle(Msg& msg) {
   switch (msg.type) {
   case MsgPid_Type: {
-
+    auto pid = DESERIALIZE(MsgPid);
     break;
   }
   case MsgServo_Type: {
-
+    auto servo = DESERIALIZE(MsgServo);
+    if (servo.servo >= MAX_SERVOS) {
+        return;
+    }
+    GetServo(servo.servo).Command(servo.pos);
     break;
   }
   case MsgMove_Type: {
-    
+    auto move = DESERIALIZE(MsgMove);
+    for (auto i = 0; i < MOTORS_COUNT; ++i) {
+        motors[i].SpeedCallback(move.x, move.y, move.theta);
+    }
+    break;
+  }
+  case MsgConfigMotor_Type: {
+    auto conf = DESERIALIZE(MsgConfigMotor);
+    if (conf.num >= MOTORS_COUNT) {
+        return;
+    }
+    MotorParams pars;
+    pars.angleDegrees = conf.angleDegrees;
+    pars.coeff = conf.coeff;
+    pars.diffCoeff = conf.diffCoeff;
+    pars.propCoeff = conf.propCoeff;
+    pars.interCoeff = conf.interCoeff;
+    pars.maxSpeed = conf.maxSpeed;
+    pars.radius = conf.radius;
+    pars.turnMaxSpeed = conf.turnMaxSpeed;
+    pars.maxSpeed = conf.maxSpeed;
+    pars.ticksPerRotation = conf.ticksPerRotation;
+    motors[conf.num].SetParams(pars);
+    ShieldPinout pinout;
+    pinout.back = conf.back;
+    pinout.fwd = conf.fwd;
+    pinout.enable = conf.enable;
+    pinout.encoderA = conf.encoderA;
+    pinout.encoderB = conf.encoderB;
+    motors[conf.num].SetPinout(pinout);
+    break;
+  }
+  case MsgConfigServo_Type: {
+    auto conf = DESERIALIZE(MsgConfigServo);
+    if (conf.num >= MAX_SERVOS) {
+        return;
+    }
+    ServosSettings pars;
+    pars.channel = conf.channel;
+    pars.maxVal = conf.maxVal;
+    pars.minVal = conf.minVal;
+    pars.speed = conf.speed;
+    GetServo(conf.num) = {pars};
+    break;
+  }
+  case MsgTest_Type: {
+    auto test = DESERIALIZE(MsgTest);
+    digitalWrite(LED_BUILTIN, test.led);
     break;
   }
   default: break;

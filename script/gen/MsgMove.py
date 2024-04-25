@@ -5,9 +5,9 @@ from typing import ClassVar
 
 @dataclass
 class MsgMove:
-    x: int
-    y: int
-    theta: int
+    x: float
+    y: float
+    theta: float
     Type: ClassVar[int] = 1
 
     @staticmethod
@@ -17,5 +17,5 @@ class MsgMove:
         return MsgMove._s.pack(getattr(self, n) for n in MsgMove._names)
 
 MsgMove._names = tuple(f.name for f in fields(MsgMove))
-MsgMove._s = struct.Struct("<HHH")
+MsgMove._s = struct.Struct("<fff")
         

@@ -8,7 +8,6 @@
 
 #define MAX_PWM 255
 #define MAX_INTER_TERM 30000
-#define MAX_MOTORS 3
 
 struct ShieldPinout
 {
@@ -43,8 +42,11 @@ public:
     using Callback = void (*)();
 
     Motor(Callback cb) : cb(cb) {}
-    void SetPinout(ShieldPinout const &params) {
-        this->pinout = pinout;
+    void SetPinout(ShieldPinout const &_pinout) {
+        if (pinout.encoderA) {
+            detachInterrupt(digitalPinToInterrupt(pinout.encoderA));
+        }
+        this->pinout = _pinout;
         pinMode(pinout.encoderB, INPUT);
         pinMode(pinout.enable, OUTPUT);
         pinMode(pinout.fwd, OUTPUT);

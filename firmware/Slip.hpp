@@ -25,7 +25,7 @@ protected:
     }
 
     void handleChar(char ch) noexcept {
-        if (err & ch == END) {
+        if (err && ch == END) {
             ptr = 0;
             err = false;
         } else if (esc) {
@@ -57,7 +57,7 @@ protected:
 public:
     Slip() = default;
     void Read() {
-        char buff[100];
+        char buff[30];
         auto av = Serial.available();
         while (av) {
             auto batch = min(sizeof(buff), av);
