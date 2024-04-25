@@ -42,7 +42,7 @@ if (UNIX)
     target_link_options(lidar PRIVATE -Wl,--no-undefined)
 endif()
 
-set(MSGS Move Odom Pid Servo ConfigMotor ConfigServo Test)
+set(MSGS Move Odom Pid Servo ConfigMotor ConfigServo Test ConfigPinout)
 
 function(Generate name source pyout cout)
     if (pyout)
@@ -82,7 +82,7 @@ install(TARGETS lidar arduino DESTINATION bang)
 install(DIRECTORY script/gen 
     DESTINATION bang 
     REGEX __pycache__ EXCLUDE)
-install(FILES script/bang.py script/odom.py
+install(FILES script/bang.py script/odom.py script/__init__.py
     DESTINATION bang 
     PERMISSIONS 
         OWNER_WRITE OWNER_READ OWNER_EXECUTE 

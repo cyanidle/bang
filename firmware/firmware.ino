@@ -16,6 +16,7 @@
 #include "gen/MsgServo.h"
 #include "gen/MsgConfigServo.h"
 #include "gen/MsgConfigMotor.h"
+#include "gen/MsgConfigPinout.h"
 #include "gen/MsgTest.h"
 
 template<typename T>
@@ -36,6 +37,7 @@ TRAITS_FOR(MsgPid)
 TRAITS_FOR(MsgServo)
 TRAITS_FOR(MsgConfigServo)
 TRAITS_FOR(MsgConfigMotor)
+TRAITS_FOR(MsgConfigPinout)
 TRAITS_FOR(MsgTest)
 
 struct PinState {
@@ -140,14 +142,14 @@ static Servo& GetServo(int num) {
 }
 
 template<typename T, typename U>
-T Deserialize(const U& msg) {
+static T Deserialize(const U& msg) {
   T res;
   MsgTraits<T>::reader(&res, msg.body, msg.size);
   return res;
 }
 
 template<typename T>
-void Send(const T& msg) {
+static void Send(const T& msg) {
   char buff[sizeof(T) + 8] = {};
   memcpy(buff + 4, &MsgTraits<T>::Type, 2);
   MsgTraits<T>::writer(&msg, buff + 8, sizeof(buff) - 8);
@@ -209,6 +211,13 @@ static void Handle(RawMsg& msg) {
     pars.maxSpeed = conf.maxSpeed;
     pars.ticksPerRotation = conf.ticksPerRotation;
     motors[conf.num].SetParams(pars);
+    break;
+  }
+  case MsgConfigPinout_Type: {
+    auto conf = Deserialize<MsgConfigPinout>(msg);
+    if (conf.num >= MOTORS_COUNT) {
+        return;
+    }
     ShieldPinout pinout;
     pinout.back = conf.back;
     pinout.fwd = conf.fwd;

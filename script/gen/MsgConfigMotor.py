@@ -15,11 +15,6 @@ class MsgConfigMotor:
     turnMaxSpeed: float
     maxSpeed: float
     ticksPerRotation: int
-    encoderA: int
-    encoderB: int
-    enable: int
-    fwd: int
-    back: int
     Type: ClassVar[int] = 5
 
     @staticmethod
@@ -29,5 +24,5 @@ class MsgConfigMotor:
         return MsgConfigMotor._s.pack(*tuple(getattr(self, n) for n in MsgConfigMotor._names))
 
 MsgConfigMotor._names = tuple(f.name for f in fields(MsgConfigMotor))
-MsgConfigMotor._s = struct.Struct("<Bfiffffffibbbbb")
+MsgConfigMotor._s = struct.Struct("<Bfiffffffi")
         

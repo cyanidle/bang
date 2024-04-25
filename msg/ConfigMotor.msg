@@ -8,10 +8,5 @@ float32 coeff
 float32 turnMaxSpeed
 float32 maxSpeed 
 int32 ticksPerRotation
-int8 encoderA
-int8 encoderB
-int8 enable
-int8 fwd
-int8 back
 
 uint16 Type = 5

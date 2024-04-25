@@ -5,6 +5,7 @@ from .MsgServo import *
 from .MsgConfigMotor import *
 from .MsgConfigServo import *
 from .MsgTest import *
+from .MsgConfigPinout import *
 AllMsgs = [
     MsgMove,
     MsgOdom,
@@ -12,5 +13,6 @@ AllMsgs = [
     MsgServo,
     MsgConfigMotor,
     MsgConfigServo,
-    MsgTest
+    MsgTest,
+    MsgConfigPinout
 ]

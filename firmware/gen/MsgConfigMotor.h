@@ -21,15 +21,10 @@ struct MsgConfigMotor {
     float32_t turnMaxSpeed;
     float32_t maxSpeed;
     int32_t ticksPerRotation;
-    int8_t encoderA;
-    int8_t encoderB;
-    int8_t enable;
-    int8_t fwd;
-    int8_t back;
 };
 
 static inline size_t parse_MsgConfigMotor(MsgConfigMotor* __restrict__ out, const char* __restrict__ src, size_t size) {
-    if (size < 42) return 0;
+    if (size < 37) return 0;
     memcpy(&out->num, src, sizeof(out->num));
     src += sizeof(out->num);
     memcpy(&out->radius, src, sizeof(out->radius));
@@ -50,21 +45,11 @@ static inline size_t parse_MsgConfigMotor(MsgConfigMotor* __restrict__ out, cons
     src += sizeof(out->maxSpeed);
     memcpy(&out->ticksPerRotation, src, sizeof(out->ticksPerRotation));
     src += sizeof(out->ticksPerRotation);
-    memcpy(&out->encoderA, src, sizeof(out->encoderA));
-    src += sizeof(out->encoderA);
-    memcpy(&out->encoderB, src, sizeof(out->encoderB));
-    src += sizeof(out->encoderB);
-    memcpy(&out->enable, src, sizeof(out->enable));
-    src += sizeof(out->enable);
-    memcpy(&out->fwd, src, sizeof(out->fwd));
-    src += sizeof(out->fwd);
-    memcpy(&out->back, src, sizeof(out->back));
-    src += sizeof(out->back);
-    return 42;
+    return 37;
 }
 
 static inline size_t dump_MsgConfigMotor(const MsgConfigMotor* __restrict__ obj, char* __restrict__ buff, size_t size) {
-    if (size < 42) return 0;
+    if (size < 37) return 0;
     memcpy(buff, &obj->num, sizeof(obj->num));
     buff += sizeof(obj->num);
     memcpy(buff, &obj->radius, sizeof(obj->radius));
@@ -85,15 +70,5 @@ static inline size_t dump_MsgConfigMotor(const MsgConfigMotor* __restrict__ obj,
     buff += sizeof(obj->maxSpeed);
     memcpy(buff, &obj->ticksPerRotation, sizeof(obj->ticksPerRotation));
     buff += sizeof(obj->ticksPerRotation);
-    memcpy(buff, &obj->encoderA, sizeof(obj->encoderA));
-    buff += sizeof(obj->encoderA);
-    memcpy(buff, &obj->encoderB, sizeof(obj->encoderB));
-    buff += sizeof(obj->encoderB);
-    memcpy(buff, &obj->enable, sizeof(obj->enable));
-    buff += sizeof(obj->enable);
-    memcpy(buff, &obj->fwd, sizeof(obj->fwd));
-    buff += sizeof(obj->fwd);
-    memcpy(buff, &obj->back, sizeof(obj->back));
-    buff += sizeof(obj->back);
-    return 42;
+    return 37;
 }
