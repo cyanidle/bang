@@ -2,6 +2,7 @@
 #define MAX_SERVOS 15
 #define MOTORS_COUNT 3
 #define MSG_BUFFER 256
+#define ODOM_DELAY_MS 10
 
 #include <Arduino.h>
 #include "motor.hpp"
@@ -75,6 +76,20 @@ void setup() {
   Serial.setTimeout(5);
 }
 
+struct Throttle {
+  unsigned long last = millis();
+  unsigned long each;
+  Throttle(unsigned long each) noexcept : each(each) {}
+  bool operator()() noexcept {
+    auto curr = millis();
+    if (curr - last > each) {
+        last = curr;
+        return true;
+    }
+    return false;
+  }
+};
+
 struct RawMsg {
   uint32_t id;
   uint16_t type;
@@ -124,15 +139,6 @@ static Servo& GetServo(int num) {
     return servos[num];
 }
 
-static void Update() {
-  for (auto i = 0; i < MAX_SERVOS; ++i) {
-    GetServo(i).Update();
-  }
-  for (auto i = 0; i < MOTORS_COUNT; ++i) {
-    motors[i].Update();
-  }
-}
-
 template<typename T, typename U>
 T Deserialize(const U& msg) {
   T res;
@@ -146,6 +152,23 @@ void Send(const T& msg) {
   memcpy(buff + 4, &MsgTraits<T>::Type, 2);
   MsgTraits<T>::writer(&msg, buff + 8, sizeof(buff) - 8);
   slip.Write(buff, sizeof(buff));
+}
+
+static void Update() {
+  for (auto i = 0; i < MAX_SERVOS; ++i) {
+    GetServo(i).Update();
+  }
+  static Throttle limit(ODOM_DELAY_MS);
+  bool send = limit();
+  for (auto i = 0; i < MOTORS_COUNT; ++i) {
+    auto ddist = motors[i].Update();
+    if (send) {
+        MsgOdom msg;
+        msg.num = i;
+        msg.ddist_mm = ddist * 1000;
+        Send(msg);
+    }
+  }
 }
 
 static void Handle(RawMsg& msg) {

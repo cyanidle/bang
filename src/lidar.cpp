@@ -183,7 +183,7 @@ struct Driver {
             node.relTheta = toRadians(nodes[i].angle_z_q14 * 90.f / 16384.f);
             result[i] = py::make_tuple(node.range, node.intensity, node.relTheta);
         }
-        scan(result);
+        _onscan(result);
     }
     void spin() {
         size_t count = 8192UL;
@@ -207,7 +207,7 @@ struct Driver {
         }
     }
 
-    virtual void scan(py::tuple) = 0;
+    virtual void _onscan(py::tuple) = 0;
     virtual void error(string msg) {
         py::print("[!] RPLidar: Error: ", msg);
     }
@@ -225,8 +225,8 @@ struct Driver {
 struct PyDriver : Driver {
     using Driver::Driver;
 
-    void scan(py::tuple data) override {
-        PYBIND11_OVERRIDE_PURE(void, Driver, scan, data);
+    void _onscan(py::tuple data) override {
+        PYBIND11_OVERRIDE_PURE(void, Driver, _onscan, data);
     }
     void error(string msg) override {
         PYBIND11_OVERRIDE(void, Driver, error, msg);
@@ -241,7 +241,7 @@ PYBIND11_MODULE(lidar, m) {
         .def(py::init<std::string>(),
                         "Create Driver with specified device URI",
                         py::arg("uri"))
-        .def("scan", &lidar::rp::Driver::scan,
+        .def("_onscan", &lidar::rp::Driver::_onscan,
                         "Override to handle scan data tuple[range, intensity, theta]",
                         py::arg("data"))
         .def("error", &lidar::rp::Driver::error,

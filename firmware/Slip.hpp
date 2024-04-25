@@ -93,5 +93,6 @@ public:
             }
         }
         Serial.write(END);
+        Serial.flush();
     }
 };

@@ -42,6 +42,7 @@ struct Channel {
     std::unordered_map<uint32_t, py::function> cbs;
     string rawbuffer = string(1024, '\0');
     string buffer;
+    string sendbuff;
     bool esc = false;
     bool err = false;
 
@@ -104,7 +105,7 @@ struct Channel {
                     cbs.erase(it);
                 }
             } else {
-                message(type, py::bytes(msg.substr(8)));
+                _onmessage(type, py::bytes(msg.substr(8)));
             }
         }
     }
@@ -174,9 +175,9 @@ struct Channel {
     void doSend(int type, py::bytes body, std::optional<py::function> ack, uint32_t id) {
         uint16_t flags = 0;
         auto orig = string_view{body};
-        auto final = std::make_shared<string>();
-        final->reserve(orig.size() + 10);
-        final->resize(8);
+        sendbuff.clear();
+        sendbuff.reserve(orig.size() + 10);
+        sendbuff.resize(8);
         if (auto& f = ack) {
             flags |= Request;
             auto [iter, ok] = cbs.try_emplace(id, std::move(*f));
@@ -188,36 +189,35 @@ struct Channel {
         auto lid = boost::endian::native_to_little(id);
         auto ltype = boost::endian::native_to_little(uint16_t(type));
         auto lflags = boost::endian::native_to_little(uint16_t(flags));
-        memcpy(final->data(), &lid, 4);
-        memcpy(final->data() + 4, &ltype, 2);
-        memcpy(final->data() + 6, &lflags, 2);
+        memcpy(sendbuff.data(), &lid, 4);
+        memcpy(sendbuff.data() + 4, &ltype, 2);
+        memcpy(sendbuff.data() + 6, &lflags, 2);
         for (auto ch: orig) {
             switch (ch) {
             case SLIP::END: {
-                *final += SLIP::ESC;
-                *final += SLIP::EscapedEnd;
+                sendbuff += SLIP::ESC;
+                sendbuff += SLIP::EscapedEnd;
                 break;
             }
             case SLIP::ESC: {
-                *final += SLIP::ESC;
-                *final += SLIP::EscapedEsc;
+                sendbuff += SLIP::ESC;
+                sendbuff += SLIP::EscapedEsc;
                 break;
             }
             default: {
-                *final += ch;
+                sendbuff += ch;
             }
             }
         }
-        *final += SLIP::END;
-        port.async_write_some(asio::buffer(*final), [final, this](auto& ec, size_t){
-            if (ec) {
-                py::gil_scoped_acquire lock;
-                error(ec.message());
-            }
-        });
+        sendbuff += SLIP::END;
+        boost::system::error_code ec;
+        port.write_some(asio::buffer(sendbuff), ec);
+        if (ec) {
+            error(ec.message());
+        }
     }
 
-    virtual void message(int type, py::bytes body) = 0;
+    virtual void _onmessage(int type, py::bytes body) = 0;
     virtual void error(string msg) {
         py::print("[!] Arduino Error: ", msg);
     }
@@ -228,8 +228,8 @@ struct Channel {
 
 struct PyChannel : Channel {
     using Channel::Channel;
-    void message(int type, py::bytes body) override {
-        PYBIND11_OVERRIDE_PURE(void, Channel, message, type, body);
+    void _onmessage(int type, py::bytes body) override {
+        PYBIND11_OVERRIDE_PURE(void, Channel, _onmessage, type, body);
     }
     void error(string msg) override {
         PYBIND11_OVERRIDE(void, Channel, error, msg);
@@ -254,7 +254,7 @@ using namespace py::literals;
 PYBIND11_MODULE(arduino, m) {
     py::class_<arduino::Channel, arduino::PyChannel>(m, "Channel")
         .def(py::init<string>(), "Create comms Channel with device on uri")
-        .def("message", &arduino::Channel::message,
+        .def("_onmessage", &arduino::Channel::_onmessage,
              "Override to handle incoming packets",
              "type"_a, "body"_a)
         .def("error", &arduino::Channel::error,
