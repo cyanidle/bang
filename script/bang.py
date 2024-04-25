@@ -61,12 +61,12 @@ class _Lidar(lidar.RP):
 @dataclass
 class Bang:
     
-    uno_uri: Optional[str] = "serial:/dev/ttyUSB0"
+    arduino_uri: Optional[str] = "serial:/dev/ttyUSB0"
     lidar_uri: Optional[str] = "serial:/dev/ttyACM0"
 
     def __post_init__(self) -> None:
-        if self.uno_uri:
-            self._arduino = _Arduino(self.uno_uri)
+        if self.arduino_uri:
+            self._arduino = _Arduino(self.arduino_uri)
         if self.lidar_uri:
             self._lidar = _Lidar(self.lidar_uri)
         self.arduino.send(MsgTest(True))
