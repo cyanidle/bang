@@ -82,7 +82,7 @@ install(TARGETS lidar arduino DESTINATION bang)
 install(DIRECTORY script/gen 
     DESTINATION bang 
     REGEX __pycache__ EXCLUDE)
-install(FILES script/bang.py 
+install(FILES script/bang.py script/odom.py
     DESTINATION bang 
     PERMISSIONS 
         OWNER_WRITE OWNER_READ OWNER_EXECUTE 

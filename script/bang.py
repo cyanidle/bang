@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass
-from functools import wraps
 import logging
 from math import inf
-from time import sleep
 from typing import Optional, Type
 import lidar
 import arduino
@@ -22,19 +20,19 @@ class _Arduino(arduino.Channel):
     def _onmessage(self, type: int, body: bytes):
         t = self._lookup.get(type)
         if t is None: 
-            print(f"Could not find msg for {type =}")
+            log.warning(f"Could not find msg for {type =}")
             return
         h = self._handlers.get(type)
         if h is None: return
         try:
             h(t.from_buffer(body))
         except Exception as e:
-            print(f"While receiving msg {type=} => {e}")
+            log.error(f"While receiving msg {type=} => {e}")
     
     def send(self, msg):
         super().send(msg.Type, msg.into_buffer())
 
-    def onmessage(self, msg):
+    def onmessage(self, msg: Type):
         def fabric(func):
             if not msg.Type in self._lookup:
                 raise RuntimeError(f"Unsupported msg type: {msg.Type}")
@@ -47,14 +45,11 @@ class _Lidar(lidar.RP):
         super().__init__(uri)
 
     def _onscan(self, data: tuple):
-        self.closest = inf
-        for dist, intencity, theta in data:
-            if self.closest > dist:
-                self.closest = dist
+        pass
     
     def onscan(self):
         def reg(func):
-            self.scan = func
+            self._onscan = func
             return func
         return reg
 
