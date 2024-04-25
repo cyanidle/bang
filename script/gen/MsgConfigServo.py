@@ -17,7 +17,7 @@ class MsgConfigServo:
     def from_buffer(buff):
         return MsgConfigServo(*MsgConfigServo._s.unpack(buff))
     def into_buffer(self):
-        return MsgConfigServo._s.pack(getattr(self, n) for n in MsgConfigServo._names)
+        return MsgConfigServo._s.pack(*tuple(getattr(self, n) for n in MsgConfigServo._names))
 
 MsgConfigServo._names = tuple(f.name for f in fields(MsgConfigServo))
 MsgConfigServo._s = struct.Struct("<hhhhhB")

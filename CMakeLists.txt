@@ -66,16 +66,25 @@ function(Generate name source pyout cout)
 endfunction()
 
 foreach(name ${MSGS})
+    list(APPEND INIT_PY "from .Msg${name} import *")
+    list(APPEND ALL_MSGS "Msg${name}")
     Generate(Msg${name}
         ${CMAKE_SOURCE_DIR}/msg/${name}.msg
         ${CMAKE_SOURCE_DIR}/script/gen/Msg${name}.py
         ${CMAKE_SOURCE_DIR}/firmware/gen/Msg${name}.h)
-    install(PROGRAMS script/gen/Msg${name}.py
-        DESTINATION bang/gen
-        PERMISSIONS WORLD_EXECUTE)
 endforeach()
 
+list(JOIN ALL_MSGS ",\n    " ALL_MSGS)
+list(JOIN INIT_PY "\n" INIT_PY)
+file(WRITE script/gen/__init__.py "${INIT_PY}\nAllMsgs = [\n    ${ALL_MSGS}\n]")
+
 install(TARGETS lidar arduino DESTINATION bang)
-install(PROGRAMS script/bang.py
-    DESTINATION bang
-    PERMISSIONS WORLD_EXECUTE)
+install(DIRECTORY script/gen 
+    DESTINATION bang 
+    REGEX __pycache__ EXCLUDE)
+install(FILES script/bang.py 
+    DESTINATION bang 
+    PERMISSIONS 
+        OWNER_WRITE OWNER_READ OWNER_EXECUTE 
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ)

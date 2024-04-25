@@ -191,7 +191,7 @@ struct Driver {
         while (!shutdown.load(std::memory_order_relaxed)) {
             if (auto err = Results(driver->grabScanDataHq(nodes.data(), count)); err & SL_RESULT_FAIL_BIT) {
                 py::gil_scoped_acquire lock;
-                error(fmt::format("Error in AscendScan: {}", PrintEnum(err)));
+                error(fmt::format("AscendScan: {}", PrintEnum(err)));
                 continue;
             }
             if (std::exchange(info.needsTune, false)) {
@@ -200,7 +200,7 @@ struct Driver {
             }
             if (auto err = Results(driver->ascendScanData(nodes.data(), count)); err & SL_RESULT_FAIL_BIT) {
                 py::gil_scoped_acquire lock;
-                error(fmt::format("Error in AscendScan: {}", PrintEnum(err)));
+                error(fmt::format("AscendScan: {}", PrintEnum(err)));
                 continue;
             }
             runCb(nodes.data(), count);
@@ -209,7 +209,7 @@ struct Driver {
 
     virtual void scan(py::tuple) = 0;
     virtual void error(string msg) {
-        py::print("RPLidar error not handled: ", msg);
+        py::print("[!] RPLidar: Error: ", msg);
     }
 
     virtual ~Driver() {
@@ -238,9 +238,15 @@ struct PyDriver : Driver {
 
 PYBIND11_MODULE(lidar, m) {
     auto cls = py::class_<lidar::rp::Driver, lidar::rp::PyDriver>(m, "RP")
-        .def(py::init<std::string>(), "Create Driver with specified device URI", py::arg("uri"))
-        .def("scan", &lidar::rp::Driver::scan, "Override to handle scan data", py::arg("data"))
-        .def("error", &lidar::rp::Driver::error, "Override to handle error messages", py::arg("msg"));
+        .def(py::init<std::string>(),
+                        "Create Driver with specified device URI",
+                        py::arg("uri"))
+        .def("scan", &lidar::rp::Driver::scan,
+                        "Override to handle scan data tuple[range, intensity, theta]",
+                        py::arg("data"))
+        .def("error", &lidar::rp::Driver::error,
+                        "Override to handle error messages",
+                        py::arg("msg"));
     cls.attr("vmajor") = SL_LIDAR_SDK_VERSION_MAJOR;
     cls.attr("vminor") = SL_LIDAR_SDK_VERSION_MINOR;
     cls.attr("vpatch") = SL_LIDAR_SDK_VERSION_PATCH;

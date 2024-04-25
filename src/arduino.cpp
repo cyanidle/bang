@@ -31,37 +31,6 @@ struct SLIP {
     static constexpr char ESC = char(0xDB);
     static constexpr char EscapedEnd = char(0xDC);
     static constexpr char EscapedEsc = char(0xDD);
-
-    static string_view DeEscape(std::string& msg) {
-        size_t pos = 0;
-        bool esc = false;
-        fmt::print(stderr, "Original: [{:x}]\n", fmt::join(msg, ","));
-        for (auto ch: msg) {
-            if (ch == char(SLIP::ESC)) {
-                if (esc) {
-                    throw Err("Escape byte right after another ESC");
-                }
-                esc = true;
-                continue;
-            } else if (ch == END) {
-
-            }
-            if (std::exchange(esc, false)) {
-                msg[pos++] = [&]{
-                    switch (ch) {
-                    case SLIP::EscapedEnd: return SLIP::END;
-                    case SLIP::EscapedEsc: return SLIP::ESC;
-                    default: throw Err("Invalid escaped byte: {}", ch);
-                    }
-                }();
-            } else {
-                msg[pos++] = ch;
-            }
-        }
-        auto result = string_view{msg.c_str(), pos};
-        fmt::print(stderr, "DeEscaped: [{:x}]\n", fmt::join(result, ","));
-        return result;
-    }
 };
 
 
@@ -71,9 +40,10 @@ struct Channel {
     std::thread thread;
     uint32_t idgen = 0;
     std::unordered_map<uint32_t, py::function> cbs;
-    string buffer = string(1024, '\0');
-    string last;
-    string current;
+    string rawbuffer = string(1024, '\0');
+    string buffer;
+    bool esc = false;
+    bool err = false;
 
     virtual ~Channel() {
         io.stop();
@@ -93,19 +63,25 @@ struct Channel {
         if (ec) {
             throw Err("Could not open: {} => {}", rawuri, ec.message());
         }
-        auto baud = opts::baud_rate{uri.GetOr("baud", 57600u)};
+        auto baud = opts::baud_rate{uri.GetOr("baud", 115200u)};
         port.set_option(baud, ec);
         if (ec) {
             throw Err("Could set baudrate of {}: {}", baud.value(), ec.message());
         }
         startRead();
         thread = std::thread([this]{
-            io.run();
+            boost::system::error_code ec;
+            io.run(ec);
+            if (ec) {
+                py::gil_scoped_acquire lock;
+                error("Could not run io: " + ec.message());
+            }
         });
     }
     void startRead() {
-        port.async_read_some(asio::buffer(buffer.data(), buffer.size()), [this](auto& ec, auto sz){
+        port.async_read_some(asio::buffer(rawbuffer.data(), rawbuffer.size()), [this](auto& ec, auto sz){
             readDone(ec, sz);
+            startRead();
         });
     }
 
@@ -117,59 +93,90 @@ struct Channel {
         auto id = boost::endian::load_little_u32(p);
         auto type = boost::endian::load_little_u16(p + 4);
         auto flags = boost::endian::load_little_u16(p + 6);
-        py::gil_scoped_acquire lock;
-        if (flags & Ack) {
-            if (msg.size() != 8) {
-                throw Err("Received ACK which is too long: {}", msg.size());
+        if (!PyGILState_Check()) {
+            py::gil_scoped_acquire lock;
+            if (flags & Ack) {
+                if (msg.size() != 8) {
+                    throw Err("Received ACK which is too long: {}", msg.size());
+                }
+                if (auto it = cbs.find(id); it != cbs.end()) {
+                    it->second();
+                    cbs.erase(it);
+                }
+            } else {
+                message(type, py::bytes(msg.substr(8)));
             }
-            if (auto it = cbs.find(id); it != cbs.end()) {
-                it->second();
-                cbs.erase(it);
-            }
-        } else {
-            message(type, py::bytes(msg.substr(8)));
         }
     }
 
     void readDone(boost::system::error_code const& ec, size_t amount) try {
         if (ec) {
-            py::gil_scoped_acquire lock;
-            error(ec.message());
-            return;
-        }
-        fmt::print(stderr, "Read done of: {}\n", amount);
-        current += last;
-        last.clear();
-        auto buffview = string_view{buffer.c_str(), amount};
-        size_t next;
-        while((next = buffview.find_first_of(SLIP::END)) != string::npos) {
-            current += buffview.substr(0, next);
-            handleMsg(SLIP::DeEscape(current));
-            current.clear();
-            if (next == buffview.size()) {
-                buffview = {};
-            } else {
-                buffview = buffview.substr(next + 1);
+            if (!PyGILState_Check()) {
+                py::gil_scoped_acquire lock;
+                error(ec.message());
+                return;
             }
         }
-        last += buffview;
-        current = {};
-        startRead();
+        auto recv = string_view{rawbuffer.data(), amount};
+        for (auto ch: recv) {
+            if (err && ch == SLIP::END) {
+                err = false;
+                buffer.clear();
+                continue;
+            }
+            if (buffer.size() > 20 * 1024) {
+                err = true;
+                continue;
+            }
+            if (std::exchange(esc, false)) {
+                switch (ch) {
+                case SLIP::EscapedEnd: {
+                    buffer += SLIP::END;
+                    continue;
+                }
+                case SLIP::EscapedEsc: {
+                    buffer += SLIP::ESC;
+                    continue;
+                }
+                default: {
+                    err = true;
+                    continue;
+                }
+                }
+            } else if (ch == SLIP::ESC) {
+                if (std::exchange(esc, true)) {
+                    err = true;
+                    continue;
+                }
+            } else if (ch == SLIP::END) {
+                handleMsg(buffer);
+                buffer.clear();
+            } else {
+                buffer += ch;
+            }
+        }
     } catch (std::exception& e) {
-        py::gil_scoped_acquire lock;
-        error(e.what());
+        startRead();
+        if (!PyGILState_Check()) {
+            py::gil_scoped_acquire lock;
+            error(e.what());
+        }
     }
 
-    void send(int type, py::bytes body, std::optional<py::function> ack) {
+    void send(int type, py::bytes body) {
+        doSend(type, body, std::nullopt, idgen++);
+    }
+
+    void send_with_ack(int type, py::bytes body, py::function ack) {
         doSend(type, body, std::move(ack), idgen++);
     }
 
     void doSend(int type, py::bytes body, std::optional<py::function> ack, uint32_t id) {
         uint16_t flags = 0;
         auto orig = string_view{body};
-        string final;
-        final.reserve(orig.size() + 10);
-        final.resize(8);
+        auto final = std::make_shared<string>();
+        final->reserve(orig.size() + 10);
+        final->resize(8);
         if (auto& f = ack) {
             flags |= Request;
             auto [iter, ok] = cbs.try_emplace(id, std::move(*f));
@@ -181,40 +188,41 @@ struct Channel {
         auto lid = boost::endian::native_to_little(id);
         auto ltype = boost::endian::native_to_little(uint16_t(type));
         auto lflags = boost::endian::native_to_little(uint16_t(flags));
-        memcpy(final.data(), &lid, 4);
-        memcpy(final.data() + 4, &ltype, 2);
-        memcpy(final.data() + 6, &lflags, 2);
+        memcpy(final->data(), &lid, 4);
+        memcpy(final->data() + 4, &ltype, 2);
+        memcpy(final->data() + 6, &lflags, 2);
         for (auto ch: orig) {
             switch (ch) {
             case SLIP::END: {
-                final += SLIP::ESC;
-                final += SLIP::EscapedEnd;
+                *final += SLIP::ESC;
+                *final += SLIP::EscapedEnd;
                 break;
             }
             case SLIP::ESC: {
-                final += SLIP::ESC;
-                final += SLIP::EscapedEsc;
+                *final += SLIP::ESC;
+                *final += SLIP::EscapedEsc;
                 break;
             }
             default: {
-                final += ch;
+                *final += ch;
             }
             }
         }
-        final += SLIP::END;
-        port.async_write_some(asio::buffer(final), [this](auto& ec, size_t written){
+        *final += SLIP::END;
+        port.async_write_some(asio::buffer(*final), [final, this](auto& ec, size_t){
             if (ec) {
                 py::gil_scoped_acquire lock;
                 error(ec.message());
-            } else {
-                fmt::print(stderr, "Written: {}\n", written);
             }
         });
     }
 
     virtual void message(int type, py::bytes body) = 0;
     virtual void error(string msg) {
-        py::print("Error: In communication with arduino: ", msg);
+        py::print("[!] Arduino Error: ", msg);
+    }
+    virtual void log(string msg) {
+        py::print("[+] Arduino: ", msg);
     }
 };
 
@@ -226,6 +234,17 @@ struct PyChannel : Channel {
     void error(string msg) override {
         PYBIND11_OVERRIDE(void, Channel, error, msg);
     }
+    void log(string msg) override {
+        PYBIND11_OVERRIDE(void, Channel, log, msg);
+    }
+    ~PyChannel() {
+        if (!PyGILState_Check()) {
+            py::gil_scoped_acquire lock;
+            cbs.clear();
+        } else {
+            cbs.clear();
+        }
+    }
 };
 
 }
@@ -235,7 +254,19 @@ using namespace py::literals;
 PYBIND11_MODULE(arduino, m) {
     py::class_<arduino::Channel, arduino::PyChannel>(m, "Channel")
         .def(py::init<string>(), "Create comms Channel with device on uri")
-        .def("message", &arduino::Channel::message, "Override to handle incoming packets", "type"_a, "body"_a)
-        .def("error", &arduino::Channel::error, "Override to handle errors", "msg"_a)
-        .def("send", &arduino::Channel::send, "Send packet with optional ack callback", "type"_a, "body"_a, "ack"_a.none());
+        .def("message", &arduino::Channel::message,
+             "Override to handle incoming packets",
+             "type"_a, "body"_a)
+        .def("error", &arduino::Channel::error,
+             "Override to handle errors",
+             "msg"_a)
+        .def("log", &arduino::Channel::log,
+             "Override to handle logs",
+             "msg"_a)
+        .def("send", &arduino::Channel::send,
+             "Send packet",
+             "type"_a, "body"_a)
+        .def("send_with_ack", &arduino::Channel::send_with_ack,
+             "Send packet with ack callback",
+             "type"_a, "body"_a, "ack"_a);
 }

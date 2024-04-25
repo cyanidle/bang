@@ -63,7 +63,7 @@ static inline size_t parse_MsgConfigMotor(MsgConfigMotor* __restrict__ out, cons
     return 42;
 }
 
-static inline size_t dump_MsgConfigMotor(MsgConfigMotor* __restrict__ obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgConfigMotor(const MsgConfigMotor* __restrict__ obj, char* __restrict__ buff, size_t size) {
     if (size < 42) return 0;
     memcpy(buff, &obj->num, sizeof(obj->num));
     buff += sizeof(obj->num);

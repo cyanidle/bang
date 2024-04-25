@@ -30,7 +30,7 @@ static inline size_t parse_MsgPid(MsgPid* __restrict__ out, const char* __restri
     return 13;
 }
 
-static inline size_t dump_MsgPid(MsgPid* __restrict__ obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgPid(const MsgPid* __restrict__ obj, char* __restrict__ buff, size_t size) {
     if (size < 13) return 0;
     memcpy(buff, &obj->motor, sizeof(obj->motor));
     buff += sizeof(obj->motor);

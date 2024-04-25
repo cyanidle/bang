@@ -21,7 +21,7 @@ static inline size_t parse_MsgTest(MsgTest* __restrict__ out, const char* __rest
     return 1;
 }
 
-static inline size_t dump_MsgTest(MsgTest* __restrict__ obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgTest(const MsgTest* __restrict__ obj, char* __restrict__ buff, size_t size) {
     if (size < 1) return 0;
     memcpy(buff, &obj->led, sizeof(obj->led));
     buff += sizeof(obj->led);

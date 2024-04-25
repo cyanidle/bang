@@ -14,7 +14,7 @@ class MsgMove:
     def from_buffer(buff):
         return MsgMove(*MsgMove._s.unpack(buff))
     def into_buffer(self):
-        return MsgMove._s.pack(getattr(self, n) for n in MsgMove._names)
+        return MsgMove._s.pack(*tuple(getattr(self, n) for n in MsgMove._names))
 
 MsgMove._names = tuple(f.name for f in fields(MsgMove))
 MsgMove._s = struct.Struct("<fff")

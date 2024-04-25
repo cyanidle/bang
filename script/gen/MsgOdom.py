@@ -14,7 +14,7 @@ class MsgOdom:
     def from_buffer(buff):
         return MsgOdom(*MsgOdom._s.unpack(buff))
     def into_buffer(self):
-        return MsgOdom._s.pack(getattr(self, n) for n in MsgOdom._names)
+        return MsgOdom._s.pack(*tuple(getattr(self, n) for n in MsgOdom._names))
 
 MsgOdom._names = tuple(f.name for f in fields(MsgOdom))
 MsgOdom._s = struct.Struct("<bbH")

@@ -15,7 +15,7 @@ class MsgPid:
     def from_buffer(buff):
         return MsgPid(*MsgPid._s.unpack(buff))
     def into_buffer(self):
-        return MsgPid._s.pack(getattr(self, n) for n in MsgPid._names)
+        return MsgPid._s.pack(*tuple(getattr(self, n) for n in MsgPid._names))
 
 MsgPid._names = tuple(f.name for f in fields(MsgPid))
 MsgPid._s = struct.Struct("<biii")

@@ -27,7 +27,7 @@ static inline size_t parse_MsgMove(MsgMove* __restrict__ out, const char* __rest
     return 12;
 }
 
-static inline size_t dump_MsgMove(MsgMove* __restrict__ obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgMove(const MsgMove* __restrict__ obj, char* __restrict__ buff, size_t size) {
     if (size < 12) return 0;
     memcpy(buff, &obj->x, sizeof(obj->x));
     buff += sizeof(obj->x);

@@ -17,13 +17,25 @@
 #include "gen/MsgConfigMotor.h"
 #include "gen/MsgTest.h"
 
-const unsigned char OK_CODE = 11;
-const unsigned char START_PIN_PRESENT = 12;
-const unsigned char START_PIN_PULLED = 13;
-const unsigned char BALL_PASSED = 14;
+template<typename T>
+struct MsgTraits {
+    static constexpr uint16_t Type = 0;
+    static constexpr auto writer = nullptr;
+    static constexpr auto reader = nullptr;
+};
+#define TRAITS_FOR(T) template<> struct MsgTraits<T> {\
+static constexpr uint16_t Type = T##_Type;\
+    static constexpr auto writer = dump_##T;\
+    static constexpr auto reader = parse_##T;\
+};
 
-#define BALLS_FOR 3  // * MAIN_LOOP(10) = 40ms ball must be present to update state
-#define BALLS_PIN 2
+TRAITS_FOR(MsgMove)
+TRAITS_FOR(MsgOdom)
+TRAITS_FOR(MsgPid)
+TRAITS_FOR(MsgServo)
+TRAITS_FOR(MsgConfigServo)
+TRAITS_FOR(MsgConfigMotor)
+TRAITS_FOR(MsgTest)
 
 struct PinState {
   explicit PinState(int pin, int neededCount) : pin(pin), neededCount(neededCount) {}
@@ -50,9 +62,9 @@ bool debounce(PinState& state) {
 
 static KadyrovLcd lcd(KadyrovLcd::Address::OLD);
 
-struct Msg;
+struct RawMsg;
 static void Update();
-static void Handle(Msg& msg);
+static void Handle(RawMsg& msg);
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -63,7 +75,7 @@ void setup() {
   Serial.setTimeout(5);
 }
 
-struct Msg {
+struct RawMsg {
   uint32_t id;
   uint16_t type;
   uint16_t flags;
@@ -71,13 +83,11 @@ struct Msg {
   size_t size;
 };
 
-bool ok = false;
-
 static void handleFrame(char* begin, size_t size) {
   if (size < 8) {
     return;
   }
-  Msg msg;
+  RawMsg msg;
   memcpy(&msg.id, begin, 4);
   memcpy(&msg.type, begin + 4, 2);
   memcpy(&msg.flags, begin + 6, 2);
@@ -123,16 +133,29 @@ static void Update() {
   }
 }
 
-#define DESERIALIZE(T) [&]{T res; parse_##T(&res, msg.body, msg.size); return res;}()
+template<typename T, typename U>
+T Deserialize(const U& msg) {
+  T res;
+  MsgTraits<T>::reader(&res, msg.body, msg.size);
+  return res;
+}
 
-static void Handle(Msg& msg) {
+template<typename T>
+void Send(const T& msg) {
+  char buff[sizeof(T) + 8] = {};
+  memcpy(buff + 4, &MsgTraits<T>::Type, 2);
+  MsgTraits<T>::writer(&msg, buff + 8, sizeof(buff) - 8);
+  slip.Write(buff, sizeof(buff));
+}
+
+static void Handle(RawMsg& msg) {
   switch (msg.type) {
   case MsgPid_Type: {
-    auto pid = DESERIALIZE(MsgPid);
+    auto pid = Deserialize<MsgPid>(msg);
     break;
   }
   case MsgServo_Type: {
-    auto servo = DESERIALIZE(MsgServo);
+    auto servo = Deserialize<MsgServo>(msg);
     if (servo.servo >= MAX_SERVOS) {
         return;
     }
@@ -140,14 +163,14 @@ static void Handle(Msg& msg) {
     break;
   }
   case MsgMove_Type: {
-    auto move = DESERIALIZE(MsgMove);
+    auto move = Deserialize<MsgMove>(msg);
     for (auto i = 0; i < MOTORS_COUNT; ++i) {
         motors[i].SpeedCallback(move.x, move.y, move.theta);
     }
     break;
   }
   case MsgConfigMotor_Type: {
-    auto conf = DESERIALIZE(MsgConfigMotor);
+    auto conf = Deserialize<MsgConfigMotor>(msg);
     if (conf.num >= MOTORS_COUNT) {
         return;
     }
@@ -173,7 +196,7 @@ static void Handle(Msg& msg) {
     break;
   }
   case MsgConfigServo_Type: {
-    auto conf = DESERIALIZE(MsgConfigServo);
+    auto conf = Deserialize<MsgConfigServo>(msg);
     if (conf.num >= MAX_SERVOS) {
         return;
     }
@@ -186,8 +209,9 @@ static void Handle(Msg& msg) {
     break;
   }
   case MsgTest_Type: {
-    auto test = DESERIALIZE(MsgTest);
+    auto test = Deserialize<MsgTest>(msg);
     digitalWrite(LED_BUILTIN, test.led);
+    Send(test);
     break;
   }
   default: break;

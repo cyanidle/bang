@@ -12,7 +12,7 @@ class MsgTest:
     def from_buffer(buff):
         return MsgTest(*MsgTest._s.unpack(buff))
     def into_buffer(self):
-        return MsgTest._s.pack(getattr(self, n) for n in MsgTest._names)
+        return MsgTest._s.pack(*tuple(getattr(self, n) for n in MsgTest._names))
 
 MsgTest._names = tuple(f.name for f in fields(MsgTest))
 MsgTest._s = struct.Struct("<B")

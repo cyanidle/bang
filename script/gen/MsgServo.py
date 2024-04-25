@@ -13,7 +13,7 @@ class MsgServo:
     def from_buffer(buff):
         return MsgServo(*MsgServo._s.unpack(buff))
     def into_buffer(self):
-        return MsgServo._s.pack(getattr(self, n) for n in MsgServo._names)
+        return MsgServo._s.pack(*tuple(getattr(self, n) for n in MsgServo._names))
 
 MsgServo._names = tuple(f.name for f in fields(MsgServo))
 MsgServo._s = struct.Struct("<hh")

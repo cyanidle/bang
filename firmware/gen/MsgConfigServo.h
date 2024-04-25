@@ -36,7 +36,7 @@ static inline size_t parse_MsgConfigServo(MsgConfigServo* __restrict__ out, cons
     return 11;
 }
 
-static inline size_t dump_MsgConfigServo(MsgConfigServo* __restrict__ obj, char* __restrict__ buff, size_t size) {
+static inline size_t dump_MsgConfigServo(const MsgConfigServo* __restrict__ obj, char* __restrict__ buff, size_t size) {
     if (size < 11) return 0;
     memcpy(buff, &obj->num, sizeof(obj->num));
     buff += sizeof(obj->num);
