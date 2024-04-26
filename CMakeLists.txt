@@ -42,7 +42,9 @@ if (UNIX)
     target_link_options(lidar PRIVATE -Wl,--no-undefined)
 endif()
 
-set(MSGS Move Odom Pid Servo ConfigMotor ConfigServo Test ConfigPinout)
+set(MSGS 
+    Move Odom Pid ConfigMotor
+    Test ConfigPinout Echo)
 
 function(Generate name source pyout cout)
     if (pyout)

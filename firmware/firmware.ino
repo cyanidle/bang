@@ -1,8 +1,9 @@
-#define BAUD_RATE 57600
+#define BAUD_RATE 115200
 #define MAX_SERVOS 15
 #define MOTORS_COUNT 3
 #define MSG_BUFFER 256
 #define ODOM_DELAY_MS 10
+#define ECHO_MSGS 1
 
 #include <Arduino.h>
 #include "motor.hpp"
@@ -13,11 +14,10 @@
 #include "gen/MsgMove.h"
 #include "gen/MsgOdom.h"
 #include "gen/MsgPid.h"
-#include "gen/MsgServo.h"
-#include "gen/MsgConfigServo.h"
 #include "gen/MsgConfigMotor.h"
 #include "gen/MsgConfigPinout.h"
 #include "gen/MsgTest.h"
+#include "gen/MsgEcho.h"
 
 template<typename T>
 struct MsgTraits {
@@ -34,11 +34,10 @@ static constexpr uint16_t Type = T##_Type;\
 TRAITS_FOR(MsgMove)
 TRAITS_FOR(MsgOdom)
 TRAITS_FOR(MsgPid)
-TRAITS_FOR(MsgServo)
-TRAITS_FOR(MsgConfigServo)
 TRAITS_FOR(MsgConfigMotor)
 TRAITS_FOR(MsgConfigPinout)
 TRAITS_FOR(MsgTest)
+TRAITS_FOR(MsgEcho)
 
 struct PinState {
   explicit PinState(int pin, int neededCount) : pin(pin), neededCount(neededCount) {}
@@ -72,10 +71,8 @@ static void Handle(RawMsg& msg);
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, 0);
-  Servo::InitAll();
   lcd.setup();
-  Serial.begin(115200);
-  Serial.setTimeout(5);
+  Serial.begin(BAUD_RATE);
 }
 
 struct Throttle {
@@ -135,10 +132,15 @@ static void SendAck(uint32_t id) {
   slip.Write(buff, sizeof(buff));
 }
 
-static Motor* motors = Make<MOTORS_COUNT>();
-static Servo& GetServo(int num) {
-    static Servo servos[MAX_SERVOS];
-    return servos[num];
+static Motor motors[MOTORS_COUNT] = {};
+
+template<size_t I>
+void MotorCb() {
+  if (digitalRead(motors[I].GetPinout().encoderB) == HIGH) {
+    motors[I].X++;
+  } else {
+    motors[I].X--;
+  }
 }
 
 template<typename T, typename U>
@@ -157,38 +159,38 @@ static void Send(const T& msg) {
 }
 
 static void Update() {
-  for (auto i = 0; i < MAX_SERVOS; ++i) {
-    GetServo(i).Update();
-  }
   static Throttle limit(ODOM_DELAY_MS);
   bool send = limit();
   for (auto i = 0; i < MOTORS_COUNT; ++i) {
+    MsgTest test{};
+    test.led = 1;
+    Send(test);
     auto ddist = motors[i].Update();
     if (send) {
-        MsgOdom msg;
+        MsgOdom msg = {};
         msg.num = i;
-        msg.ddist_mm = ddist * 1000;
+        msg.ddist_mm = ddist * 1000.f;
         Send(msg);
     }
   }
 }
 
 static void Handle(RawMsg& msg) {
+#if ECHO_MSGS
+  MsgEcho echo = {};
+  echo.type = msg.type;
+  echo.size = msg.size;
+  Send(echo);
+#endif
   switch (msg.type) {
   case MsgPid_Type: {
     auto pid = Deserialize<MsgPid>(msg);
     break;
   }
-  case MsgServo_Type: {
-    auto servo = Deserialize<MsgServo>(msg);
-    if (servo.servo >= MAX_SERVOS) {
-        return;
-    }
-    GetServo(servo.servo).Command(servo.pos);
-    break;
-  }
   case MsgMove_Type: {
     auto move = Deserialize<MsgMove>(msg);
+    echo.size = move.x;
+    Send(echo);
     for (auto i = 0; i < MOTORS_COUNT; ++i) {
         motors[i].SpeedCallback(move.x, move.y, move.theta);
     }
@@ -199,18 +201,7 @@ static void Handle(RawMsg& msg) {
     if (conf.num >= MOTORS_COUNT) {
         return;
     }
-    MotorParams pars;
-    pars.angleDegrees = conf.angleDegrees;
-    pars.coeff = conf.coeff;
-    pars.diffCoeff = conf.diffCoeff;
-    pars.propCoeff = conf.propCoeff;
-    pars.interCoeff = conf.interCoeff;
-    pars.maxSpeed = conf.maxSpeed;
-    pars.radius = conf.radius;
-    pars.turnMaxSpeed = conf.turnMaxSpeed;
-    pars.maxSpeed = conf.maxSpeed;
-    pars.ticksPerRotation = conf.ticksPerRotation;
-    motors[conf.num].SetParams(pars);
+    motors[conf.num].SetParams(conf);
     break;
   }
   case MsgConfigPinout_Type: {
@@ -218,26 +209,14 @@ static void Handle(RawMsg& msg) {
     if (conf.num >= MOTORS_COUNT) {
         return;
     }
-    ShieldPinout pinout;
-    pinout.back = conf.back;
-    pinout.fwd = conf.fwd;
-    pinout.enable = conf.enable;
-    pinout.encoderA = conf.encoderA;
-    pinout.encoderB = conf.encoderB;
-    motors[conf.num].SetPinout(pinout);
-    break;
-  }
-  case MsgConfigServo_Type: {
-    auto conf = Deserialize<MsgConfigServo>(msg);
-    if (conf.num >= MAX_SERVOS) {
-        return;
+    Motor::Callback cb = nullptr;
+    switch (conf.num){
+    case 0: cb = MotorCb<0>; break;
+    case 1: cb = MotorCb<1>; break;
+    case 2: cb = MotorCb<2>; break;
+    default: return;
     }
-    ServosSettings pars;
-    pars.channel = conf.channel;
-    pars.maxVal = conf.maxVal;
-    pars.minVal = conf.minVal;
-    pars.speed = conf.speed;
-    GetServo(conf.num) = {pars};
+    motors[conf.num].SetPinout(cb, conf);
     break;
   }
   case MsgTest_Type: {

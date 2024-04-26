@@ -16,23 +16,12 @@ protected:
     bool esc = 0;
     bool err = false;
 
-    bool checkFull() noexcept {
-        if (ptr == sizeof(buff)) {
-            err = true;
-            return true;
-        }
-        return false;
-    }
-
     void handleChar(char ch) noexcept {
         if (err && ch == END) {
             ptr = 0;
             err = false;
         } else if (esc) {
             esc = false;
-            if (checkFull()) {
-                return;
-            }
             switch (ch) {
             case EscapedEsc:
                 buff[ptr++] = ESC;
@@ -50,14 +39,14 @@ protected:
             ptr = 0;
         } else if (ch == ESC) {
             esc = true;
-        } else if (!checkFull()) {
+        } else {
             buff[ptr++] = ch;
         }
     }
 public:
     Slip() = default;
     void Read() {
-        char buff[30];
+        char buff[100];
         auto av = Serial.available();
         while (av) {
             auto batch = min(sizeof(buff), av);

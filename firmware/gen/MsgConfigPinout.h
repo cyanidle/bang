@@ -11,7 +11,7 @@ typedef enum {
 } MsgConfigPinout_;
 
 struct MsgConfigPinout {
-    int8_t num;
+    uint8_t num;
     int8_t encoderA;
     int8_t encoderB;
     int8_t enable;

@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import logging
 from math import inf
+from time import sleep
 from typing import Optional, Type
 from .lidar import RP
 from .arduino import Channel
@@ -11,6 +12,7 @@ log = logging.getLogger("bang")
 
 class _Arduino(Channel):
     def __init__(self, uri):
+        self._hadmsg = False
         self._lookup = {}
         self._handlers = {}
         for m in AllMsgs:
@@ -18,6 +20,7 @@ class _Arduino(Channel):
         super().__init__(uri)
 
     def _onmessage(self, type: int, body: bytes):
+        self._hadmsg = True
         t = self._lookup.get(type)
         if t is None: 
             log.warning(f"Could not find msg for {type =}")
@@ -64,6 +67,7 @@ class Bang:
             self._arduino = _Arduino(self.arduino_uri)
         if self.lidar_uri:
             self._lidar = _Lidar(self.lidar_uri)
+        while not self.arduino._hadmsg: sleep(0.1)
         self.arduino.send(MsgTest(True))
         self.arduino.send(MsgTest(False))
         self.arduino.send(MsgTest(True))

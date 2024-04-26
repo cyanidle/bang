@@ -1,4 +1,4 @@
-int8 num
+uint8 num
 int8 encoderA
 int8 encoderB
 int8 enable

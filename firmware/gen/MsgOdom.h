@@ -13,7 +13,7 @@ typedef enum {
 struct MsgOdom {
     int8_t num;
     int8_t aux;
-    uint16_t ddist_mm;
+    int16_t ddist_mm;
 };
 
 static inline size_t parse_MsgOdom(MsgOdom* __restrict__ out, const char* __restrict__ src, size_t size) {

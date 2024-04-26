@@ -4,32 +4,12 @@
 #include <stddef.h>
 #include <string.h>
 #include <Arduino.h>
-#include "utility.hpp"
+
+#include "gen/MsgConfigMotor.h"
+#include "gen/MsgConfigPinout.h"
 
 #define MAX_PWM 255
 #define MAX_INTER_TERM 30000
-
-struct ShieldPinout
-{
-    int encoderA;
-    int encoderB;
-    int enable;
-    int fwd;
-    int back;
-};
-
-struct MotorParams
-{
-    float radius;
-    int angleDegrees;
-    float interCoeff;
-    float propCoeff;
-    float diffCoeff;
-    float coeff = 1;
-    float turnMaxSpeed = 0.25;
-    float maxSpeed = 0.50;
-    int ticksPerRotation = 360;
-};
 
 static inline float toRadians(float degrees)
 {
@@ -41,8 +21,8 @@ class Motor
 public:
     using Callback = void (*)();
 
-    Motor(Callback cb) : cb(cb) {}
-    void SetPinout(ShieldPinout const &_pinout) {
+    Motor() = default;
+    void SetPinout(Callback cb, MsgConfigPinout const &_pinout) {
         if (pinout.encoderA) {
             detachInterrupt(digitalPinToInterrupt(pinout.encoderA));
         }
@@ -53,7 +33,7 @@ public:
         pinMode(pinout.back, OUTPUT);
         attachInterrupt(digitalPinToInterrupt(pinout.encoderA), cb, RISING);
     }
-    void SetParams(const MotorParams &initStruct)
+    void SetParams(const MsgConfigMotor &initStruct)
     {
         params = initStruct;
         xCoeff = cos(toRadians(initStruct.angleDegrees));
@@ -132,8 +112,7 @@ public:
     float currSpd = {};
     int dX = {};
     int pwm = {};
-    const ShieldPinout &GetPinout() const noexcept
-    {
+    const MsgConfigPinout &GetPinout() const noexcept {
         return pinout;
     }
 
@@ -154,9 +133,8 @@ private:
         pwm = constrain(pwm, -MAX_PWM, MAX_PWM);
     }
     /// @brief Params
-    Callback cb;
-    const ShieldPinout pinout = {};
-    MotorParams params;
+    MsgConfigPinout pinout = {};
+    MsgConfigMotor params;
     float xCoeff;
     float yCoeff;
     /// @brief Non Const States
@@ -172,30 +150,3 @@ private:
     bool stopped = {};
     bool enabled = {true};
 };
-
-namespace detail
-{
-
-static Motor *all;
-
-template <size_t I>
-void doRead()
-{
-    all[I].X += digitalRead(all[I].GetPinout().encoderB) == HIGH ? 1 : -1;
-}
-
-template <size_t count, size_t... Is>
-Motor *make(IndexSeq<Is...>)
-{
-    static Motor::Callback cbs[count] = {doRead<Is>...};
-    static Motor motors[count] = {Motor(cbs[Is])...};
-    return all = motors;
-}
-
-}
-
-template <size_t count>
-Motor *Make()
-{
-    return detail::make<count>(MakeSeq<count>());
-}

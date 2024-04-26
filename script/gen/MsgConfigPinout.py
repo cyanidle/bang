@@ -20,5 +20,5 @@ class MsgConfigPinout:
         return MsgConfigPinout._s.pack(*tuple(getattr(self, n) for n in MsgConfigPinout._names))
 
 MsgConfigPinout._names = tuple(f.name for f in fields(MsgConfigPinout))
-MsgConfigPinout._s = struct.Struct("<bbbbbb")
+MsgConfigPinout._s = struct.Struct("<Bbbbbb")
         

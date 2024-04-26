@@ -17,5 +17,5 @@ class MsgOdom:
         return MsgOdom._s.pack(*tuple(getattr(self, n) for n in MsgOdom._names))
 
 MsgOdom._names = tuple(f.name for f in fields(MsgOdom))
-MsgOdom._s = struct.Struct("<bbH")
+MsgOdom._s = struct.Struct("<bbh")
         
