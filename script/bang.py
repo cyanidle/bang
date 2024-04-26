@@ -32,7 +32,7 @@ class _Arduino(arduino.Channel):
     def send(self, msg):
         super().send(msg.Type, msg.into_buffer())
 
-    def onmessage(self, msg: Type):
+    def on(self, msg: Type):
         def fabric(func):
             if not msg.Type in self._lookup:
                 raise RuntimeError(f"Unsupported msg type: {msg.Type}")
