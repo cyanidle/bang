@@ -17,7 +17,10 @@ protected:
     bool err = false;
 
     void handleChar(char ch) noexcept {
-        if (err && ch == END) {
+        if (ptr >= sizeof(buff)) {
+            ptr = 0;
+            err = 1;
+        } else if (err && ch == END) {
             ptr = 0;
             err = false;
         } else if (esc) {
@@ -46,15 +49,9 @@ protected:
 public:
     Slip() = default;
     void Read() {
-        char buff[100];
-        auto av = Serial.available();
-        while (av) {
-            auto batch = min(sizeof(buff), av);
-            Serial.readBytes(buff, batch);
-            for (size_t i = 0; i < batch; ++i) {
-                handleChar(buff[i]);
-            }
-            av -= batch;
+        int ch = 0;
+        while ((ch = Serial.read()) != -1) {
+            handleChar(ch);
         }
     }
     static void Write(const char* data, size_t size) {

@@ -2,7 +2,7 @@
 #define MAX_SERVOS 15
 #define MOTORS_COUNT 3
 #define MSG_BUFFER 256
-#define ODOM_DELAY_MS 10
+#define ODOM_DELAY_MS 30
 #define ECHO_MSGS 1
 
 #include <Arduino.h>
@@ -18,6 +18,7 @@
 #include "gen/MsgConfigPinout.h"
 #include "gen/MsgTest.h"
 #include "gen/MsgEcho.h"
+#include "gen/MsgReadPin.h"
 
 template<typename T>
 struct MsgTraits {
@@ -38,6 +39,7 @@ TRAITS_FOR(MsgConfigMotor)
 TRAITS_FOR(MsgConfigPinout)
 TRAITS_FOR(MsgTest)
 TRAITS_FOR(MsgEcho)
+TRAITS_FOR(MsgReadPin)
 
 struct PinState {
   explicit PinState(int pin, int neededCount) : pin(pin), neededCount(neededCount) {}
@@ -144,10 +146,8 @@ void MotorCb() {
 }
 
 template<typename T, typename U>
-static T Deserialize(const U& msg) {
-  T res;
-  MsgTraits<T>::reader(&res, msg.body, msg.size);
-  return res;
+static bool Deserialize(T& res, const U& msg) {
+  return MsgTraits<T>::reader(&res, msg.body, msg.size) == msg.size;
 }
 
 template<typename T>
@@ -162,9 +162,6 @@ static void Update() {
   static Throttle limit(ODOM_DELAY_MS);
   bool send = limit();
   for (auto i = 0; i < MOTORS_COUNT; ++i) {
-    MsgTest test{};
-    test.led = 1;
-    Send(test);
     auto ddist = motors[i].Update();
     if (send) {
         MsgOdom msg = {};
@@ -184,28 +181,51 @@ static void Handle(RawMsg& msg) {
 #endif
   switch (msg.type) {
   case MsgPid_Type: {
-    auto pid = Deserialize<MsgPid>(msg);
+    MsgPid pid;
+    if (!Deserialize(pid, msg)) {
+      return;
+    }
     break;
   }
   case MsgMove_Type: {
-    auto move = Deserialize<MsgMove>(msg);
-    echo.size = move.x;
-    Send(echo);
+    MsgMove move;
+    if (!Deserialize(move, msg)) {
+      return;
+    }
+    float x = move.x/1000.f;
+    float y = move.y/1000.f;
+    float z = move.theta/1000.f;
     for (auto i = 0; i < MOTORS_COUNT; ++i) {
-        motors[i].SpeedCallback(move.x, move.y, move.theta);
+        motors[i].SpeedCallback(x, y, z);
     }
     break;
   }
   case MsgConfigMotor_Type: {
-    auto conf = Deserialize<MsgConfigMotor>(msg);
+    MsgConfigMotor conf;
+    if (!Deserialize(conf, msg)) {
+      return;
+    }
     if (conf.num >= MOTORS_COUNT) {
         return;
     }
     motors[conf.num].SetParams(conf);
     break;
   }
+  case MsgReadPin_Type: {
+    MsgReadPin pin;
+    if (!Deserialize(pin, msg)) {
+      return;
+    }
+    pinMode(pin.pin, pin.pullup ? INPUT_PULLUP : INPUT);
+    pin.value = digitalRead(pin.pin);
+    Send(pin); 
+    break;
+  }
   case MsgConfigPinout_Type: {
-    auto conf = Deserialize<MsgConfigPinout>(msg);
+    MsgConfigPinout conf;
+    if (!Deserialize(conf, msg)) {
+      return;
+    }
     if (conf.num >= MOTORS_COUNT) {
         return;
     }
@@ -220,7 +240,10 @@ static void Handle(RawMsg& msg) {
     break;
   }
   case MsgTest_Type: {
-    auto test = Deserialize<MsgTest>(msg);
+    MsgTest test;
+    if (!Deserialize(test, msg)) {
+      return;
+    }
     digitalWrite(LED_BUILTIN, test.led);
     Send(test);
     break;

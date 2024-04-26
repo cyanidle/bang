@@ -1,5 +1,5 @@
-float32 x
-float32 y
-float32 theta
+int16 x
+int16 y
+int16 theta
 
 uint16 Type = 1

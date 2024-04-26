@@ -43,7 +43,7 @@ if (UNIX)
 endif()
 
 set(MSGS 
-    Move Odom Pid ConfigMotor
+    Move Odom Pid ConfigMotor ReadPin
     Test ConfigPinout Echo)
 
 function(Generate name source pyout cout)
