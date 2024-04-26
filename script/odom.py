@@ -2,7 +2,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 from math import cos, radians, sin
 from typing import List, Tuple
-from gen import MsgOdom, MsgConfigMotor
+from .gen import MsgOdom, MsgConfigMotor
 
 Position = namedtuple("Position", ("x", "y", "th"))
 
@@ -26,11 +26,16 @@ class Odom:
     def __post_init__(self):
         self._mots = tuple(_Mot(c) for c in self.motors)
         self._x = self._y = self._th = 0.
+        self._hits = 0
     
+    @property
+    def hits(self): return self._hits
+
     def handle(self, msg: MsgOdom):
         if msg.num >= len(self._mots): 
             return False
         else: 
+            self._hits += 1
             self._mots[msg.num].ddist += msg.ddist_mm * 1000.
             return True
 

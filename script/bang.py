@@ -3,13 +3,13 @@ from dataclasses import dataclass
 import logging
 from math import inf
 from typing import Optional, Type
-import lidar
-import arduino
-from gen import *
+from .lidar import RP
+from .arduino import Channel
+from .gen import *
 
 log = logging.getLogger("bang")
 
-class _Arduino(arduino.Channel):
+class _Arduino(Channel):
     def __init__(self, uri):
         self._lookup = {}
         self._handlers = {}
@@ -40,7 +40,7 @@ class _Arduino(arduino.Channel):
             return func
         return fabric
 
-class _Lidar(lidar.RP):
+class _Lidar(RP):
     def __init__(self, uri):
         super().__init__(uri)
 
